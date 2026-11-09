@@ -1,31 +1,53 @@
 import json
+import math
 import os
 import time
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .engine import Engine
 from .signals import CATALOG
+
+
+class DialRange(BaseModel):
+    minimum: float
+    maximum: float
+
+    @model_validator(mode="after")
+    def increasing_finite_range(self) -> Self:
+        if not math.isfinite(self.minimum) or not math.isfinite(self.maximum) or self.minimum >= self.maximum:
+            raise ValueError("Choose finite dial limits with the maximum greater than the minimum")
+        return self
 
 
 class Layout(BaseModel):
     theme: Literal["auto", "day", "night"] = "auto"
     units: Literal["metric", "imperial"] = "metric"
     instruments: list[str] = Field(default_factory=lambda: ["voltageV", "currentA", "displayedChargePercent"], max_length=12)
+    presentation: Literal["dials", "readings", "history"] = "dials"
+    ranges: dict[str, DialRange] = Field(default_factory=dict, max_length=12)
 
     @field_validator("instruments")
     @classmethod
     def known_instruments(cls, value: list[str]) -> list[str]:
         if len(value) != len(set(value)) or any(key not in CATALOG for key in value):
             raise ValueError("Select distinct instruments from the catalog")
+        return value
+
+    @field_validator("ranges")
+    @classmethod
+    def known_ranges(cls, value: dict[str, DialRange]) -> dict[str, DialRange]:
+        if any(key not in CATALOG for key in value):
+            raise ValueError("Choose dial ranges for known instruments")
         return value
 
 
@@ -85,6 +107,11 @@ def create_app(
         engine.close()
 
     app = FastAPI(title="Tesla CAN Dashboard", lifespan=lifespan, docs_url=None, redoc_url=None)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_input(_: Request, error: RequestValidationError) -> JSONResponse:
+        # Raw invalid input can contain non-finite numbers, which JSON responses reject.
+        return JSONResponse({"detail": "; ".join(str(item["msg"]) for item in error.errors())}, status_code=422)
 
     @app.middleware("http")
     async def same_origin_changes(request: Request, call_next):
