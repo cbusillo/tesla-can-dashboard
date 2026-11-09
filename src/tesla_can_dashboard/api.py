@@ -31,7 +31,14 @@ class Layout(BaseModel):
 
 class ReplayRequest(BaseModel):
     session_id: str | None = None
-    rate: Literal[0.5, 1, 2, 4] = 1
+    rate: float = 1
+
+    @field_validator("rate")
+    @classmethod
+    def supported_rate(cls, value: float) -> float:
+        if value not in (0.5, 1, 2, 4):
+            raise ValueError("Unsupported replay speed")
+        return value
 
 
 class BrowserReport(BaseModel):

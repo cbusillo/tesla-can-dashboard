@@ -122,10 +122,12 @@ def test_replay_gap_ages_signals_and_reports_disconnection(tmp_path) -> None:
     engine = Engine("can0", recorder)
     try:
         engine.start_replay(session)
+        store = engine.replay_store
+        assert store is not None
         deadline = time.monotonic() + 1
-        while engine.replay_store.frames == 0 and time.monotonic() < deadline:
+        while store.frames == 0 and time.monotonic() < deadline:
             time.sleep(0.001)
-        assert engine.replay_store.frames == 1
+        assert store.frames == 1
         engine.replay_clock -= 10
         data = engine.snapshot()
         assert data["signals"]["voltageV"]["quality"] == "stale"
@@ -145,8 +147,11 @@ def test_bad_selected_frames_are_recorded_and_replay_continues(tmp_path) -> None
     assert len(list(read_frames(recorder.path(session)))) == 2
     assert engine.store.decode_errors == 1
     engine.start_replay(session)
-    engine.replay_thread.join(timeout=1)
+    thread = engine.replay_thread
+    store = engine.replay_store
+    assert thread is not None and store is not None
+    thread.join(timeout=1)
     assert engine.replay_state == "finished"
-    assert engine.replay_store.frames == 1
-    assert engine.replay_store.decode_errors == 1
+    assert store.frames == 1
+    assert store.decode_errors == 1
     engine.close()

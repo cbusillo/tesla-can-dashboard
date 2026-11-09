@@ -60,7 +60,7 @@ def test_recording_export_delete_and_active_session_protection(tmp_path, monkeyp
 def test_bad_browser_report_cannot_break_report_history(tmp_path) -> None:
     engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
     with TestClient(create_app(engine, tmp_path)) as client:
-        report = {"browser": "test browser", "updates": 10, "visibility": "visible", "requestTimesMs": [24]}
+        report: dict[str, object] = {"browser": "test browser", "updates": 10, "visibility": "visible", "requestTimesMs": [24]}
         assert client.post("/api/browser-check", json=report).status_code == 200
         report["requestTimesMs"] = [float("nan")]
         assert (

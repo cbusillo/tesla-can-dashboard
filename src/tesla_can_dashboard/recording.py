@@ -46,7 +46,9 @@ def read_frames(path: Path) -> Iterator[Frame]:
                 raise ValueError("Recording contains an invalid CAN identifier")
             if not isinstance(payload, str) or len(payload) > 16:
                 raise ValueError("Recording contains an invalid CAN payload")
-            if type(timestamp) not in (int, float) or not math.isfinite(timestamp) or type(monotonic) is not int or monotonic < 0:
+            if not isinstance(timestamp, (int, float)) or isinstance(timestamp, bool) or not math.isfinite(timestamp):
+                raise ValueError("Recording contains an invalid timestamp")
+            if not isinstance(monotonic, int) or isinstance(monotonic, bool) or monotonic < 0:
                 raise ValueError("Recording contains an invalid timestamp")
             try:
                 data = bytes.fromhex(payload)

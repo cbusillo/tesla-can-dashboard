@@ -19,7 +19,10 @@ CELL_NAME = re.compile(r"BMS_brickVoltage(\d+)$")
 
 class Decoder:
     def __init__(self, dbc: Path | None = None) -> None:
-        self.database = cantools.database.load_file(dbc, strict=False) if dbc else None
+        database = cantools.database.load_file(dbc, database_format="dbc", strict=False) if dbc else None
+        if database is not None and not isinstance(database, cantools.database.can.Database):
+            raise ValueError("A CAN DBC is required")
+        self.database = database
         self.messages = (
             {}
             if self.database is None

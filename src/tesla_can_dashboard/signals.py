@@ -62,7 +62,7 @@ class SignalStore:
     def _add(series: SignalSeries, value: float | None, valid: bool, timestamp: float, now: float) -> None:
         valid = valid and value is not None and math.isfinite(value)
         series.sample = Sample(value if valid else None, timestamp, now, valid)
-        if not valid:
+        if not valid or value is None:
             return
         series.minimum = value if series.minimum is None else min(series.minimum, value)
         series.maximum = value if series.maximum is None else max(series.maximum, value)

@@ -46,8 +46,9 @@ class Engine:
 
     def start(self) -> None:
         if self.interface:
-            self.thread = threading.Thread(target=self._receive, daemon=True)
-            self.thread.start()
+            thread = threading.Thread(target=self._receive, daemon=True)
+            self.thread = thread
+            thread.start()
 
     def close(self) -> None:
         self.stop_event.set()
@@ -99,7 +100,9 @@ class Engine:
     def _demo_snapshot(self) -> dict:
         elapsed = (time.monotonic() - self.started_at) % 30
         store = SignalStore(self.store.cell_count)
-        store.update(self.demo["values"], {cell["index"]: cell["voltageV"] for cell in self.demo["cellGroups"]}, time.time(), now=0)
+        demo = self.demo
+        assert demo is not None
+        store.update(demo["values"], {cell["index"]: cell["voltageV"] for cell in demo["cellGroups"]}, time.time(), now=0)
         snapshot = store.snapshot(now=0)
         if 10 <= elapsed < 15:
             snapshot["signals"]["currentA"].update(quality="stale", ageSeconds=8)
@@ -143,15 +146,17 @@ class Engine:
             raise ValueError("Stop recording before replaying this session")
         self.stop_replay()
         self.replay_stop.clear()
-        self.replay_store = SignalStore(self.store.cell_count)
+        store = SignalStore(self.store.cell_count)
+        self.replay_store = store
         self.replay_time = 0
         self.replay_clock = time.monotonic()
         self.replay_rate = rate
         self.replay_state = "playing"
         self.replay_id = session_id
         self.replay_error = None
-        self.replay_thread = threading.Thread(target=self._replay, args=(path, rate, self.replay_store), daemon=True)
-        self.replay_thread.start()
+        thread = threading.Thread(target=self._replay, args=(path, rate, store), daemon=True)
+        self.replay_thread = thread
+        thread.start()
 
     def _replay(self, path: Path, rate: float, store: SignalStore) -> None:
         previous = None
