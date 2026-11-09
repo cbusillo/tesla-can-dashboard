@@ -1,374 +1,789 @@
-import { render } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
-import uPlot from "uplot";
-import "uplot/dist/uPlot.min.css";
+import { render, type ComponentChildren } from "preact";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { initialize } from "@ionic/core/components";
+import { addIcons } from "ionicons";
+import {
+  batteryHalfOutline,
+  thermometerOutline,
+  gridOutline,
+  settingsOutline,
+  moonOutline,
+  documentTextOutline,
+  speedometerOutline,
+  addOutline,
+  optionsOutline,
+} from "ionicons/icons";
+import "@ionic/core/css/core.css";
+import "@ionic/core/css/normalize.css";
+import "@ionic/core/css/structure.css";
+import "@ionic/core/css/typography.css";
+import "@ionic/core/css/padding.css";
+import "@ionic/core/css/palettes/dark.class.css";
+import { defineComponents } from "./ionic";
+import { lazy, Suspense } from "preact/compat";
+const Dial = lazy(() =>
+  import("./charts").then((module) => ({ default: module.Dial })),
+);
+const History = lazy(() =>
+  import("./charts").then((module) => ({ default: module.History })),
+);
+const CellChart = lazy(() =>
+  import("./charts").then((module) => ({ default: module.CellChart })),
+);
+import {
+  api,
+  convert,
+  toCanonical,
+  display,
+  displayUnit,
+  initialLayout,
+  holdSnapshot,
+  type Definition,
+  type Layout,
+  type Reading,
+  type Snapshot,
+} from "./types";
 import "./style.css";
+initialize({ mode: "ios", animated: false });
+addIcons({
+  batteryHalfOutline,
+  thermometerOutline,
+  gridOutline,
+  settingsOutline,
+  moonOutline,
+  documentTextOutline,
+  speedometerOutline,
+  addOutline,
+  optionsOutline,
+});
+defineComponents();
 
-type Reading = {
-  value: number | null;
-  quality: string;
-  unit: string;
-  ageSeconds: number | null;
-  minimum: number | null;
-  maximum: number | null;
-  history: number[][];
-};
-type Session = { id: string; sizeBytes: number; modifiedAt: number };
-type Snapshot = {
-  mode: string;
-  connection: { state: string; error?: string };
-  signals: Record<string, Reading>;
-  cellGroups: (Reading & { index: number })[];
-  cellSpreadMv: number | null;
-  freshCellCount: number;
-  currentDirection: string;
-  reloadRevision: string;
-  recording: {
-    activeId: string | null;
-    error: string | null;
-    sessions: Session[];
-  };
-  replay?: { state: string; source: string; error?: string };
-};
-type Definition = { key: string; label: string; unit: string; group: string };
-type Layout = {
-  theme: "auto" | "day" | "night";
-  units: "metric" | "imperial";
-  instruments: string[];
-};
-const initialLayout: Layout = {
-  theme: "night",
-  units: "metric",
-  instruments: ["voltageV", "currentA", "displayedChargePercent"],
-};
-async function api<T>(
-  path: string,
-  method = "GET",
-  body?: unknown,
-): Promise<T> {
-  const response = await fetch("/api/" + path, {
-    method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) {
-    const detail = await response
-      .json()
-      .catch(() => ({ detail: "Request failed" }));
-    throw new Error(
-      typeof detail.detail === "string"
-        ? detail.detail
-        : "Please check your selection",
-    );
-  }
-  return response.json();
-}
-function display(
-  reading: Reading | undefined,
-  units: string,
-  decimals?: number,
-) {
-  if (!reading || reading.value === null || reading.quality === "invalid")
-    return { value: "—", unit: reading?.unit || "" };
-  let value = reading.value,
-    unit = reading.unit;
-  if (units === "imperial" && unit === "°C") {
-    value = (value * 9) / 5 + 32;
-    unit = "°F";
-  }
-  if (units === "imperial" && unit === "km/h") {
-    value /= 1.609344;
-    unit = "mph";
-  }
-  return { value: value.toFixed(decimals ?? (unit === "V" ? 2 : 1)), unit };
-}
-function Trace({
-  reading,
-  units,
-}: {
-  reading: Reading | undefined;
-  units: string;
-}) {
-  const node = useRef<HTMLDivElement>(null),
-    plot = useRef<uPlot | null>(null);
-  useEffect(() => {
-    if (!node.current) return;
-    const chart = new uPlot(
-      {
-        width: node.current.clientWidth,
-        height: 140,
-        legend: { show: false },
-        cursor: { show: false },
-        series: [{}, { stroke: "#53b9e8", width: 2 }],
-        axes: [
-          { show: false },
-          { stroke: "#8c97a5", grid: { stroke: "#263342" }, size: 45 },
-        ],
-        scales: { x: { time: true } },
-      },
-      [[], []],
-      node.current,
-    );
-    plot.current = chart;
-    const observer = new ResizeObserver(() => {
-      if (node.current)
-        chart.setSize({ width: node.current.clientWidth, height: 140 });
-    });
-    observer.observe(node.current);
-    return () => {
-      observer.disconnect();
-      chart.destroy();
-      plot.current = null;
-    };
-  }, []);
-  useEffect(() => {
-    const points = reading?.history || [];
-    plot.current?.setData([
-      points.map((p) => p[0]),
-      points.map((p) =>
-        reading?.unit === "°C" && units === "imperial"
-          ? (p[1] * 9) / 5 + 32
-          : reading?.unit === "km/h" && units === "imperial"
-            ? p[1] / 1.609344
-            : p[1],
-      ),
-    ]);
-  }, [reading, units]);
-  return <div ref={node} aria-label="Recent signal history" />;
-}
-function App() {
+function useDashboard() {
   const [data, setData] = useState<Snapshot | null>(null),
     [catalog, setCatalog] = useState<Definition[]>([]),
     [layout, setLayout] = useState(initialLayout),
-    [tab, setTab] = useState("Overview"),
-    [error, setError] = useState(""),
+    [connectionError, setConnectionError] = useState(""),
     [actionError, setActionError] = useState(""),
-    [selected, setSelected] = useState("voltageV"),
-    [cell, setCell] = useState<number | null>(null),
-    [pending, setPending] = useState(false);
-  const revision = useRef<string | null>(null),
-    timings = useRef<number[]>([]),
-    updates = useRef(0),
-    mounted = useRef(true);
+    [busy, setBusy] = useState(false),
+    [ready, setReady] = useState(false);
+  const revision = useRef<string | null>(null);
+  const lastKnown = useRef<{ snapshot: Snapshot; receivedAt: number } | null>(
+    null,
+  );
+  function acceptSnapshot(snapshot: Snapshot) {
+    lastKnown.current = { snapshot, receivedAt: performance.now() };
+    setData(snapshot);
+  }
   useEffect(() => {
-    mounted.current = true;
-    let timer: ReturnType<typeof setTimeout>;
-    api<{ signals: Definition[] }>("catalog")
-      .then((v) => setCatalog(v.signals))
-      .catch((e) => setActionError(e.message));
-    api<Layout>("layout")
-      .then(setLayout)
-      .catch((e) => setActionError(e.message));
+    let alive = true,
+      timer: ReturnType<typeof setTimeout>;
+    let updates = 0;
+    const timings: number[] = [];
+    let metadataLoaded = false,
+      metadataLoading = false;
+    function loadMetadata() {
+      if (metadataLoaded || metadataLoading) return;
+      metadataLoading = true;
+      Promise.all([
+        api<{ signals: Definition[] }>("catalog"),
+        api<Layout>("layout"),
+      ])
+        .then(([c, l]) => {
+          if (alive) {
+            setCatalog(c.signals);
+            setLayout({ ...initialLayout, ...l });
+            setReady(true);
+            metadataLoaded = true;
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          metadataLoading = false;
+        });
+    }
+    loadMetadata();
     async function poll() {
       try {
         const started = performance.now(),
           next = await api<Snapshot>("snapshot");
-        if (!mounted.current) return;
+        if (!alive) return;
         if (revision.current && revision.current !== next.reloadRevision) {
           location.reload();
           return;
         }
         revision.current = next.reloadRevision;
-        setData(next);
-        setError("");
-        updates.current++;
-        timings.current = [
-          ...timings.current.slice(-19),
-          performance.now() - started,
-        ];
-        if (updates.current === 10 || updates.current % 120 === 0)
+        acceptSnapshot(next);
+        setConnectionError("");
+        loadMetadata();
+        updates++;
+        timings.push(performance.now() - started);
+        if (timings.length > 20) timings.shift();
+        if (updates === 10 || updates % 120 === 0)
           api("browser-check", "POST", {
             browser: navigator.userAgent,
-            updates: updates.current,
-            requestTimesMs: timings.current,
+            updates,
+            requestTimesMs: timings,
             visibility: document.visibilityState,
             width: innerWidth,
             height: innerHeight,
           }).catch(() => {});
-      } catch (e) {
-        if (mounted.current)
-          setError("Connection lost. Reconnecting automatically.");
+      } catch {
+        if (alive) {
+          setConnectionError("Connection lost. Reconnecting automatically.");
+          const last = lastKnown.current;
+          if (last)
+            setData(
+              holdSnapshot(
+                last.snapshot,
+                (performance.now() - last.receivedAt) / 1000,
+              ),
+            );
+        }
       }
-      if (mounted.current)
-        timer = setTimeout(poll, document.hidden ? 2000 : 500);
+      if (alive) timer = setTimeout(poll, document.hidden ? 2000 : 500);
     }
     poll();
     return () => {
-      mounted.current = false;
+      alive = false;
       clearTimeout(timer);
     };
   }, []);
-  useEffect(() => {
-    document.documentElement.dataset.theme = layout.theme;
-  }, [layout.theme]);
   async function act(path: string, method = "POST", body?: unknown) {
-    setPending(true);
+    setBusy(true);
     try {
       await api(path, method, body);
-      setData(await api<Snapshot>("snapshot"));
+      acceptSnapshot(await api<Snapshot>("snapshot"));
       setActionError("");
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
-      setPending(false);
+      setBusy(false);
     }
   }
   async function save(next: Layout) {
+    if (!ready) return false;
+    setBusy(true);
     try {
-      await api("layout", "PUT", next);
-      setLayout(next);
+      const saved = await api<Layout>("layout", "PUT", next);
+      setLayout(saved);
       setActionError("");
+      return true;
     } catch (e) {
       setActionError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
     }
   }
-  const replay = data?.mode === "replay",
-    selectedCell = data?.cellGroups.find((c) => c.index === cell),
-    state = error ? "disconnected" : data?.connection.state || "connecting";
+  return {
+    data,
+    catalog,
+    layout,
+    connectionError,
+    actionError,
+    setActionError,
+    busy: busy || !ready,
+    act,
+    save,
+  };
+}
+function Row({
+  label,
+  reading,
+  units,
+  icon,
+  decimals,
+}: {
+  label: string;
+  reading: Reading | undefined;
+  units: string;
+  icon?: string;
+  decimals?: number;
+}) {
   return (
-    <>
-      <header>
-        <div>
-          <strong>CAN dashboard</strong>
-          <small>Development preview</small>
+    <ion-item>
+      {icon && <ion-icon slot="start" name={icon} color="primary" />}
+      <ion-label>
+        {label}
+        {reading && reading.quality !== "fresh" && (
+          <p>
+            {reading.quality === "stale" ? "Held reading" : reading.quality}
+          </p>
+        )}
+      </ion-label>
+      <ion-note
+        slot="end"
+        color={reading?.quality === "fresh" ? "dark" : "medium"}
+      >
+        {display(reading, units, decimals)}
+      </ion-note>
+    </ion-item>
+  );
+}
+function Page({
+  name,
+  title,
+  status,
+  children,
+  toggleTheme,
+  toolbar,
+}: {
+  name: string;
+  title: string;
+  status: string;
+  children: ComponentChildren;
+  toggleTheme: () => void;
+  toolbar?: ComponentChildren;
+}) {
+  return (
+    <ion-tab tab={name}>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>{title}</ion-title>
+          <ion-buttons slot="end">
+            {toolbar}
+            <ion-button onClick={toggleTheme} aria-label="Change appearance">
+              <ion-icon name="moon-outline" slot="icon-only" />
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+        <div class="connection-note">
+          <ion-note>{status}</ion-note>
         </div>
-        <span class={"status " + state}>
-          {replay ? "Replay · " : ""}
-          {state}
-        </span>
-      </header>
-      {error && (
-        <div class="alert" role="alert">
-          {error}
+      </ion-header>
+      <ion-content color="light">{children}</ion-content>
+    </ion-tab>
+  );
+}
+function App() {
+  const {
+    data,
+    catalog,
+    layout,
+    connectionError,
+    actionError,
+    setActionError,
+    busy,
+    act,
+    save,
+  } = useDashboard();
+  const [tab, setTab] = useState("battery"),
+    [selectedCell, setSelectedCell] = useState<number | null>(null),
+    [editKey, setEditKey] = useState<string | null>(null),
+    [rangeMin, setRangeMin] = useState(""),
+    [rangeMax, setRangeMax] = useState(""),
+    [rangeAuto, setRangeAuto] = useState(true),
+    [formError, setFormError] = useState(""),
+    [chooseOpen, setChooseOpen] = useState(false),
+    [deviceDark, setDeviceDark] = useState(
+      matchMedia("(prefers-color-scheme: dark)").matches,
+    );
+  const tabs = useRef<HTMLIonTabsElement>(null);
+  const dark =
+    layout.theme === "night" || (layout.theme === "auto" && deviceDark);
+  useEffect(() => {
+    const query = matchMedia("(prefers-color-scheme: dark)");
+    const changed = (event: MediaQueryListEvent) =>
+      setDeviceDark(event.matches);
+    query.addEventListener("change", changed);
+    return () => query.removeEventListener("change", changed);
+  }, []);
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle("ion-palette-dark", dark);
+  }, [dark]);
+  const replay = data?.mode === "replay",
+    demo = data?.replay?.source === "demonstration";
+  const status = connectionError
+    ? "Disconnected · reconnecting"
+    : demo
+      ? "Recorded demonstration" +
+        (data?.connection.state === "disconnected" ? " · data gap" : "")
+      : replay
+        ? "Replay · " +
+          (data?.replay?.state || "playing") +
+          (data?.connection.state === "disconnected" ? " · data gap" : "")
+        : data?.connection.state === "connected"
+          ? "Live data · connected"
+          : "Live data · " + (data?.connection.state || "connecting");
+  const theme = () => save({ ...layout, theme: dark ? "day" : "night" });
+  const navigate = (name: string) => {
+    tabs.current?.select(name);
+  };
+  const signals = data?.signals || {},
+    cells = data?.cellGroups || [],
+    fresh = cells.filter((c) => c.quality === "fresh" && c.value !== null),
+    cell = cells.find((c) => c.index === selectedCell);
+  const spread =
+    data?.cellSpreadMv === null || data?.cellSpreadMv === undefined
+      ? "—"
+      : data.cellSpreadMv.toFixed(1) + " mV";
+  function openRange(key: string) {
+    const definition = catalog.find((c) => c.key === key);
+    if (!definition) return;
+    const range = layout.ranges[key];
+    setRangeAuto(!range);
+    setRangeMin(
+      String(
+        convert(
+          range?.minimum ?? definition.minimum,
+          definition.unit,
+          layout.units,
+        ),
+      ),
+    );
+    setRangeMax(
+      String(
+        convert(
+          range?.maximum ?? definition.maximum,
+          definition.unit,
+          layout.units,
+        ),
+      ),
+    );
+    setFormError("");
+    setEditKey(key);
+  }
+  async function saveRange() {
+    const definition = catalog.find((c) => c.key === editKey);
+    if (!definition) return;
+    const ranges = { ...layout.ranges };
+    if (rangeAuto) delete ranges[definition.key];
+    else {
+      const lo = Number(rangeMin),
+        hi = Number(rangeMax);
+      if (
+        rangeMin.trim() === "" ||
+        rangeMax.trim() === "" ||
+        !Number.isFinite(lo) ||
+        !Number.isFinite(hi) ||
+        lo >= hi
+      ) {
+        setFormError(
+          "Enter finite limits with the maximum greater than the minimum.",
+        );
+        return;
+      }
+      ranges[definition.key] = {
+        minimum: toCanonical(lo, definition.unit, layout.units),
+        maximum: toCanonical(hi, definition.unit, layout.units),
+      };
+    }
+    if (await save({ ...layout, ranges })) setEditKey(null);
+  }
+  const common = { status, toggleTheme: theme };
+  return (
+    <ion-app>
+      <ion-text color="dark" id="chart-text" hidden />
+      <ion-note color="primary" id="chart-primary" hidden />
+      <ion-note color="medium" id="chart-muted" hidden />
+      <ion-note color="light" id="chart-track" hidden />
+      <ion-note color="tertiary" id="chart-accent" hidden />
+      {(connectionError || actionError || data?.replay?.error) && (
+        <div class="message" role="alert">
+          {actionError || connectionError || data?.replay?.error}
+          {actionError && (
+            <ion-button
+              fill="clear"
+              size="small"
+              onClick={() => setActionError("")}
+            >
+              Dismiss
+            </ion-button>
+          )}
         </div>
       )}
-      {actionError && (
-        <div class="alert" role="alert">
-          {actionError}{" "}
-          <button onClick={() => setActionError("")}>Dismiss</button>
-        </div>
-      )}
-      {data?.replay?.error && (
-        <div class="alert" role="alert">
-          {data.replay.error}
-        </div>
-      )}
-      <nav aria-label="Pages">
-        {["Overview", "Cells", "Sessions", "Settings"].map((name) => (
-          <button
-            aria-current={tab === name ? "page" : undefined}
-            onClick={() => setTab(name)}
-          >
-            {name}
-          </button>
-        ))}
-      </nav>
-      <main>
-        {tab === "Overview" && (
-          <>
-            <section class="instruments">
-              {layout.instruments.map((key) => {
-                const definition = catalog.find((d) => d.key === key),
-                  reading = data?.signals[key],
-                  formatted = display(reading, layout.units);
-                return (
-                  <button
-                    class={
-                      "instrument " +
-                      (error ? "stale" : reading?.quality || "unavailable")
-                    }
-                    onClick={() => setSelected(key)}
-                    aria-pressed={selected === key}
+      <ion-tabs
+        ref={tabs}
+        onionTabsDidChange={(event) => setTab(event.detail.tab)}
+      >
+        <Page name="battery" title="Battery" {...common}>
+          <ion-grid fixed>
+            <ion-row>
+              <ion-col size="12" size-md="6">
+                <ion-list-header>
+                  <ion-label>Charge</ion-label>
+                </ion-list-header>
+                <ion-list inset>
+                  <Row
+                    label="State of charge"
+                    reading={signals.displayedChargePercent}
+                    units={layout.units}
+                    icon="battery-half-outline"
+                  />
+                  {signals.displayedChargePercent?.quality === "fresh" && (
+                    <ion-item lines="none">
+                      <ion-progress-bar
+                        color="success"
+                        value={
+                          (signals.displayedChargePercent.value ?? 0) / 100
+                        }
+                      />
+                    </ion-item>
+                  )}
+                  <Row
+                    label="Remaining energy"
+                    reading={signals.remainingEnergyKwh}
+                    units={layout.units}
+                  />
+                  <Row
+                    label="Full pack energy"
+                    reading={signals.fullPackEnergyKwh}
+                    units={layout.units}
+                  />
+                </ion-list>
+                <ion-list-header>
+                  <ion-label>Electrical</ion-label>
+                </ion-list-header>
+                <ion-list inset>
+                  <Row
+                    label="Pack voltage"
+                    reading={signals.voltageV}
+                    units={layout.units}
+                  />
+                  <Row
+                    label="Pack current"
+                    reading={signals.currentA}
+                    units={layout.units}
+                  />
+                </ion-list>
+                <p class="supporting ion-padding-horizontal">
+                  Current uses the CAN sign; charge/discharge direction is
+                  unverified.
+                </p>
+              </ion-col>
+              <ion-col size="12" size-md="6">
+                <ion-list-header>
+                  <ion-label>Temperature</ion-label>
+                </ion-list-header>
+                <ion-list inset>
+                  <Row
+                    label="Lowest"
+                    reading={signals.minimumTemperatureC}
+                    units={layout.units}
+                    icon="thermometer-outline"
+                  />
+                  <Row
+                    label="Highest"
+                    reading={signals.maximumTemperatureC}
+                    units={layout.units}
+                  />
+                </ion-list>
+                <ion-list-header>
+                  <ion-label>Cell groups</ion-label>
+                </ion-list-header>
+                <ion-list inset>
+                  <ion-item button detail onClick={() => navigate("cells")}>
+                    <ion-icon
+                      slot="start"
+                      name="grid-outline"
+                      color="primary"
+                    />
+                    <ion-label>
+                      <h2>Voltage balance</h2>
+                      <p>
+                        {data?.freshCellCount || 0} / {cells.length || "—"}{" "}
+                        groups fresh
+                      </p>
+                    </ion-label>
+                    <ion-note slot="end" color="dark">
+                      {spread}
+                    </ion-note>
+                  </ion-item>
+                  <ion-item
+                    button
+                    detail
+                    onClick={() => navigate("instruments")}
                   >
-                    <span>{definition?.label || key}</span>
-                    <strong>
-                      {formatted.value}
-                      <small>{formatted.unit}</small>
-                    </strong>
-                    <em>
-                      {error ? "disconnected" : reading?.quality || "waiting"}
-                    </em>
-                  </button>
+                    <ion-icon
+                      slot="start"
+                      name="speedometer-outline"
+                      color="primary"
+                    />
+                    <ion-label>Dials and history</ion-label>
+                  </ion-item>
+                </ion-list>
+                <ion-list-header>
+                  <ion-label>Charging</ion-label>
+                </ion-list-header>
+                <ion-list inset>
+                  <Row
+                    label="Charging power"
+                    reading={signals.chargingPowerKw}
+                    units={layout.units}
+                  />
+                  <Row
+                    label="Charge limit"
+                    reading={signals.chargeLimitPercent}
+                    units={layout.units}
+                  />
+                </ion-list>
+              </ion-col>
+            </ion-row>
+          </ion-grid>
+        </Page>
+        <Page
+          name="instruments"
+          title="Instruments"
+          {...common}
+          toolbar={
+            <ion-button
+              onClick={() => setChooseOpen(true)}
+              aria-label="Choose instruments"
+            >
+              <ion-icon slot="icon-only" name="add-outline" />
+            </ion-button>
+          }
+        >
+          <ion-toolbar>
+            <ion-segment
+              value={layout.presentation}
+              onionChange={(event) =>
+                save({
+                  ...layout,
+                  presentation: event.detail.value as Layout["presentation"],
+                })
+              }
+            >
+              <ion-segment-button value="dials">
+                <ion-label>Dials</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="readings">
+                <ion-label>Readings</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="history">
+                <ion-label>History</ion-label>
+              </ion-segment-button>
+            </ion-segment>
+          </ion-toolbar>
+          {!layout.instruments.length && (
+            <div class="ion-padding">
+              <p>Choose the signals you want to watch.</p>
+              <ion-button onClick={() => setChooseOpen(true)}>
+                Choose instruments
+              </ion-button>
+            </div>
+          )}
+          <ion-grid fixed>
+            <ion-row>
+              {layout.instruments.map((key) => {
+                const definition = catalog.find((c) => c.key === key),
+                  reading = signals[key],
+                  valid =
+                    reading?.value !== null &&
+                    reading?.value !== undefined &&
+                    reading.quality !== "invalid",
+                  range = layout.ranges[key] || {
+                    minimum: definition?.minimum ?? 0,
+                    maximum: definition?.maximum ?? 100,
+                  };
+                return (
+                  <ion-col
+                    size="12"
+                    size-sm="6"
+                    size-md={layout.presentation === "history" ? "6" : "4"}
+                    key={key}
+                  >
+                    <ion-card>
+                      <ion-card-header>
+                        <div class="instrument-heading">
+                          <ion-card-title>
+                            {definition?.label || key}
+                          </ion-card-title>
+                          <ion-button
+                            fill="clear"
+                            size="small"
+                            onClick={() => openRange(key)}
+                            aria-label={
+                              "Configure " + (definition?.label || key)
+                            }
+                          >
+                            <ion-icon name="options-outline" slot="icon-only" />
+                          </ion-button>
+                        </div>
+                      </ion-card-header>
+                      <ion-card-content>
+                        {layout.presentation === "dials" &&
+                        valid &&
+                        tab === "instruments" ? (
+                          <Suspense
+                            fallback={<ion-note>Loading dial…</ion-note>}
+                          >
+                            <Dial
+                              reading={reading}
+                              range={range}
+                              units={layout.units}
+                              dark={dark}
+                              label={definition?.label || key}
+                            />
+                          </Suspense>
+                        ) : (
+                          <div
+                            class={
+                              "reading " + (reading?.quality || "unavailable")
+                            }
+                          >
+                            {display(reading, layout.units)}
+                          </div>
+                        )}
+                        {layout.presentation === "history" &&
+                          tab === "instruments" && (
+                            <Suspense
+                              fallback={<ion-note>Loading history…</ion-note>}
+                            >
+                              <History
+                                reading={reading}
+                                units={layout.units}
+                                dark={dark}
+                                label={definition?.label || key}
+                                staleAfter={definition?.stale_after}
+                              />
+                            </Suspense>
+                          )}
+                        <p class="quality">
+                          {(connectionError ||
+                            data?.connection.state === "disconnected") &&
+                          !replay
+                            ? "Disconnected · "
+                            : ""}
+                          {reading?.quality === "stale"
+                            ? "Held reading"
+                            : reading?.quality || "Waiting"}
+                          {reading?.ageSeconds !== null &&
+                          reading?.ageSeconds !== undefined
+                            ? " · " + reading.ageSeconds.toFixed(1) + " s ago"
+                            : ""}
+                        </p>
+                      </ion-card-content>
+                    </ion-card>
+                  </ion-col>
                 );
               })}
-            </section>
-            <section class="panel">
-              <h2>
-                {catalog.find((d) => d.key === selected)?.label || selected}
-              </h2>
-              <Trace reading={data?.signals[selected]} units={layout.units} />
-              <p>
-                Recent 2 minutes.{" "}
-                {data?.signals[selected]?.ageSeconds !== null &&
-                data?.signals[selected]?.ageSeconds !== undefined
-                  ? `Last sample ${data.signals[selected].ageSeconds!.toFixed(1)} seconds ago.`
-                  : "Waiting for a compatible signal."}
-              </p>
-            </section>
-            <p class="note">
-              Pack current uses the CAN sign. Charge and discharge direction
-              have not been verified.
-            </p>
-          </>
-        )}
-        {tab === "Cells" && (
-          <>
-            <section class="cell-summary">
-              <div>
-                <span>Cell group spread</span>
-                <strong>
-                  {data?.cellSpreadMv === null ||
-                  data?.cellSpreadMv === undefined
-                    ? "—"
-                    : data.cellSpreadMv.toFixed(1)}
-                  <small> mV</small>
-                </strong>
-              </div>
-              <p>
-                {data?.freshCellCount || 0} / {data?.cellGroups.length || 0}{" "}
-                groups fresh
-                <br />
-                Spread requires every configured group.
-              </p>
-            </section>
-            <div class="cells">
-              {data?.cellGroups.map((c) => (
-                <button
-                  class={error ? "stale" : c.quality}
-                  aria-pressed={cell === c.index}
-                  onClick={() => setCell(c.index)}
+            </ion-row>
+          </ion-grid>
+          <p class="supporting ion-padding-horizontal">
+            History uses received sample times. Dial limits affect the display
+            only.
+          </p>
+        </Page>
+        <Page name="cells" title="Cell groups" {...common}>
+          <ion-list-header>
+            <ion-label>Voltage balance</ion-label>
+          </ion-list-header>
+          <ion-list inset>
+            <ion-item>
+              <ion-label>Spread across all groups</ion-label>
+              <ion-note slot="end" color="dark">
+                {spread}
+              </ion-note>
+            </ion-item>
+            <ion-item>
+              <ion-label>Fresh groups</ion-label>
+              <ion-note slot="end" color="dark">
+                {data?.freshCellCount || 0} / {cells.length || "—"}
+              </ion-note>
+            </ion-item>
+            {fresh.length > 0 && (
+              <>
+                <ion-item>
+                  <ion-label>Lowest fresh group</ion-label>
+                  <ion-note slot="end" color="dark">
+                    {Math.min(...fresh.map((c) => c.value!)).toFixed(4)} V
+                  </ion-note>
+                </ion-item>
+                <ion-item>
+                  <ion-label>Highest fresh group</ion-label>
+                  <ion-note slot="end" color="dark">
+                    {Math.max(...fresh.map((c) => c.value!)).toFixed(4)} V
+                  </ion-note>
+                </ion-item>
+              </>
+            )}
+          </ion-list>
+          {fresh.length > 0 && tab === "cells" && (
+            <ion-card>
+              <ion-card-content>
+                <Suspense fallback={<ion-note>Loading cell chart…</ion-note>}>
+                  <CellChart
+                    cells={cells}
+                    selected={selectedCell}
+                    onSelect={setSelectedCell}
+                    dark={dark}
+                  />
+                </Suspense>
+              </ion-card-content>
+            </ion-card>
+          )}
+          {cell && (
+            <ion-list inset>
+              <ion-item>
+                <ion-label>
+                  <h2>Group {cell.index}</h2>
+                  <p>
+                    {cell.quality}
+                    {cell.ageSeconds !== null
+                      ? " · " + cell.ageSeconds.toFixed(1) + " s ago"
+                      : ""}
+                  </p>
+                </ion-label>
+                <ion-note slot="end" color="dark">
+                  {display(cell, "metric", 4)}
+                </ion-note>
+              </ion-item>
+            </ion-list>
+          )}
+          <ion-list-header>
+            <ion-label>All measured groups</ion-label>
+          </ion-list-header>
+          <ion-list inset class="cell-list">
+            {cells.map((c) => (
+              <ion-item
+                button
+                color={selectedCell === c.index ? "primary" : undefined}
+                key={c.index}
+                onClick={() => setSelectedCell(c.index)}
+              >
+                <ion-label>
+                  Group {c.index}
+                  <p>{c.quality}</p>
+                  {selectedCell === c.index &&
+                    c.minimum !== null &&
+                    c.maximum !== null && (
+                      <p>
+                        Observed {c.minimum.toFixed(4)}–{c.maximum.toFixed(4)} V
+                      </p>
+                    )}
+                </ion-label>
+                <ion-note
+                  slot="end"
+                  color={c.quality === "fresh" ? "dark" : "medium"}
                 >
-                  <span>{c.index}</span>
-                  <strong>{display(c, "metric", 4).value}</strong>
-                </button>
-              ))}
-            </div>
-            <p>
-              {selectedCell
-                ? `Group ${selectedCell.index}: ${display(selectedCell, "metric", 4).value} V, ${selectedCell.quality}.`
-                : "Tap a cell group to inspect it."}
-            </p>
-            <p class="note">
-              A cell group is several cells measured together. This view does
-              not determine the age or health of individual cells.
-            </p>
-          </>
-        )}
-        {tab === "Sessions" && (
-          <>
-            <section class="panel">
-              <h2>Record a drive or charge</h2>
-              <p>
-                Selected telemetry only. Recording continues while you review a
-                saved session. Files stay on this device until you remove them.
-              </p>
-              <button
-                disabled={
-                  pending ||
-                  (!data?.recording.activeId &&
-                    data?.replay?.source === "demonstration")
-                }
+                  {display(c, "metric", 4)}
+                </ion-note>
+              </ion-item>
+            ))}
+          </ion-list>
+          <p class="supporting ion-padding">
+            Group order is numerical, not a map of the pack. Balance alone does
+            not establish battery health or cell age.
+          </p>
+        </Page>
+        <Page name="sessions" title="Sessions" {...common}>
+          <ion-list-header>
+            <ion-label>Recording</ion-label>
+          </ion-list-header>
+          <ion-list inset>
+            <ion-item>
+              <ion-label>
+                <h2>
+                  {data?.recording.activeId
+                    ? "Recording live telemetry"
+                    : "Record a drive or charge"}
+                </h2>
+                <p>Files stay on this device until you remove them.</p>
+              </ion-label>
+              <ion-button
+                slot="end"
+                disabled={busy || (!data?.recording.activeId && demo)}
                 onClick={() =>
                   act(
                     data?.recording.activeId
@@ -377,138 +792,267 @@ function App() {
                   )
                 }
               >
-                {data?.recording.activeId
-                  ? "Stop recording"
-                  : "Start recording"}
-              </button>
-              {data?.recording.activeId && (
-                <span role="status"> Recording</span>
-              )}
-              {data?.recording.error && (
-                <p role="alert">{data.recording.error}</p>
-              )}
-            </section>
-            {data?.replay && data.replay.source !== "demonstration" && (
-              <section class="panel">
-                <p>Replay {data.replay.state}</p>
-                <button
-                  disabled={pending}
+                {data?.recording.activeId ? "Stop" : "Record"}
+              </ion-button>
+            </ion-item>
+          </ion-list>
+          {data?.recording.error && (
+            <p class="ion-padding-horizontal" role="alert">
+              {data.recording.error}
+            </p>
+          )}
+          {replay && !demo && (
+            <ion-list inset>
+              <ion-item>
+                <ion-label>Replay {data?.replay?.state}</ion-label>
+                <ion-button
+                  slot="end"
+                  disabled={busy}
                   onClick={() => act("replay", "POST", { session_id: null })}
                 >
-                  Return to live data
-                </button>
-              </section>
-            )}
-            <section>
-              <h2>Saved sessions</h2>
-              {!data?.recording.sessions.length && (
-                <p>
-                  No sessions yet. Start recording when live CAN data is
-                  connected.
-                </p>
-              )}
-              {data?.recording.sessions.map((s) => (
-                <article class="session">
-                  <div>
-                    <strong>
-                      {new Date(s.modifiedAt * 1000).toLocaleString()}
-                    </strong>
-                    <small>
-                      {(s.sizeBytes / 1024).toFixed(0)} KB{" "}
-                      {s.id === data.recording.activeId ? "· recording" : ""}
-                    </small>
-                  </div>
-                  <a href={"/api/recordings/" + s.id} download>
-                    Export
-                  </a>
-                  <button
-                    disabled={pending || s.id === data.recording.activeId}
-                    onClick={() =>
-                      act("replay", "POST", { session_id: s.id, rate: 1 })
-                    }
-                  >
-                    Replay
-                  </button>
-                  <button
-                    disabled={pending || s.id === data.recording.activeId}
-                    onClick={() => {
-                      if (
-                        confirm(
-                          "Remove this saved session from the device? Export it first if you want to keep it.",
-                        )
+                  Return to live
+                </ion-button>
+              </ion-item>
+            </ion-list>
+          )}
+          <ion-list-header>
+            <ion-label>Saved sessions</ion-label>
+          </ion-list-header>
+          <ion-list inset>
+            {data?.recording.sessions.map((s) => (
+              <ion-item key={s.id}>
+                <ion-label>
+                  <h2>{new Date(s.modifiedAt * 1000).toLocaleString()}</h2>
+                  <p>
+                    {(s.sizeBytes / 1024).toFixed(0)} KB
+                    {s.id === data.recording.activeId ? " · recording" : ""}
+                  </p>
+                </ion-label>
+                <ion-button
+                  fill="clear"
+                  href={"/api/recordings/" + s.id}
+                  download=""
+                >
+                  Export
+                </ion-button>
+                <ion-button
+                  fill="clear"
+                  disabled={busy || s.id === data.recording.activeId}
+                  onClick={() =>
+                    act("replay", "POST", { session_id: s.id, rate: 1 })
+                  }
+                >
+                  Replay
+                </ion-button>
+                <ion-button
+                  fill="clear"
+                  color="danger"
+                  disabled={busy || s.id === data.recording.activeId}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Remove this saved session? Export it first if you want to keep it.",
                       )
-                        act("recordings/" + s.id, "DELETE");
-                    }}
-                  >
-                    Remove
-                  </button>
-                </article>
-              ))}
-            </section>
-          </>
-        )}
-        {tab === "Settings" && (
-          <section class="panel">
-            <h2>Your dashboard</h2>
-            <label>
-              Appearance
-              <select
+                    )
+                      act("recordings/" + s.id, "DELETE");
+                  }}
+                >
+                  Remove
+                </ion-button>
+              </ion-item>
+            ))}
+          </ion-list>
+          {!data?.recording.sessions.length && (
+            <p class="supporting ion-padding">
+              No saved sessions. Start recording when live CAN data is
+              connected.
+            </p>
+          )}
+          <p class="supporting ion-padding-horizontal">
+            Live recording continues while you review another saved session.
+          </p>
+        </Page>
+        <Page name="settings" title="Settings" {...common}>
+          <ion-list-header>
+            <ion-label>Display</ion-label>
+          </ion-list-header>
+          <ion-list inset>
+            <ion-item>
+              <ion-select
+                label="Appearance"
                 value={layout.theme}
-                onChange={(e) =>
-                  save({
-                    ...layout,
-                    theme: e.currentTarget.value as Layout["theme"],
-                  })
-                }
+                interface="popover"
+                onionChange={(e) => save({ ...layout, theme: e.detail.value })}
               >
-                <option value="auto">System</option>
-                <option value="day">Day</option>
-                <option value="night">Night</option>
-              </select>
-            </label>
-            <label>
-              Units
-              <select
+                <ion-select-option value="auto">System</ion-select-option>
+                <ion-select-option value="day">Day</ion-select-option>
+                <ion-select-option value="night">Night</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
+              <ion-select
+                label="Units"
                 value={layout.units}
-                onChange={(e) =>
-                  save({
-                    ...layout,
-                    units: e.currentTarget.value as Layout["units"],
-                  })
-                }
+                interface="popover"
+                onionChange={(e) => save({ ...layout, units: e.detail.value })}
               >
-                <option value="metric">Metric</option>
-                <option value="imperial">US</option>
-              </select>
-            </label>
-            <h3>Instruments</h3>
-            <div class="choices">
-              {catalog.map((d) => (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={layout.instruments.includes(d.key)}
-                    onChange={(e) =>
-                      save({
-                        ...layout,
-                        instruments: e.currentTarget.checked
-                          ? [...layout.instruments, d.key]
-                          : layout.instruments.filter((k) => k !== d.key),
-                      })
-                    }
-                  />
+                <ion-select-option value="metric">Metric</ion-select-option>
+                <ion-select-option value="imperial">US</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item button detail onClick={() => setChooseOpen(true)}>
+              <ion-label>Choose instruments</ion-label>
+            </ion-item>
+          </ion-list>
+          <ion-list-header>
+            <ion-label>About</ion-label>
+          </ion-list-header>
+          <ion-list inset>
+            <ion-item>
+              <ion-label>
+                <h2>Receive-only CAN dashboard</h2>
+                <p>
+                  {demo
+                    ? "Recorded demonstration" +
+                      (data?.connection.state === "disconnected"
+                        ? " · data gap"
+                        : "")
+                    : replay
+                      ? "Reviewing a recording"
+                      : "Listening to the configured CAN interface"}
+                </p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h2>Current direction unverified</h2>
+                <p>Pack current uses the sign reported on CAN.</p>
+              </ion-label>
+            </ion-item>
+          </ion-list>
+          <p class="supporting ion-padding">
+            Use the dashboard while parked. Browser availability while moving
+            and recovery from vehicle sleep require in-car qualification.
+          </p>
+        </Page>
+        <ion-tab-bar slot="bottom">
+          {[
+            ["battery", "Battery", "battery-half-outline"],
+            ["instruments", "Instruments", "speedometer-outline"],
+            ["cells", "Cells", "grid-outline"],
+            ["sessions", "Sessions", "document-text-outline"],
+            ["settings", "Settings", "settings-outline"],
+          ].map(([key, label, icon]) => (
+            <ion-tab-button tab={key}>
+              <ion-icon name={icon} />
+              <ion-label>{label}</ion-label>
+            </ion-tab-button>
+          ))}
+        </ion-tab-bar>
+      </ion-tabs>
+      <ion-modal
+        isOpen={chooseOpen}
+        onionModalDidDismiss={() => setChooseOpen(false)}
+      >
+        <ion-header>
+          <ion-toolbar>
+            <ion-title>Instruments</ion-title>
+            <ion-buttons slot="end">
+              <ion-button onClick={() => setChooseOpen(false)}>Done</ion-button>
+            </ion-buttons>
+          </ion-toolbar>
+        </ion-header>
+        <ion-content color="light">
+          <ion-list inset>
+            {catalog.map((d) => (
+              <ion-item key={d.key}>
+                <ion-checkbox
+                  disabled={busy}
+                  checked={layout.instruments.includes(d.key)}
+                  onionChange={(e) =>
+                    save({
+                      ...layout,
+                      instruments: e.detail.checked
+                        ? [...layout.instruments, d.key]
+                        : layout.instruments.filter((key) => key !== d.key),
+                    })
+                  }
+                >
                   {d.label}
-                </label>
-              ))}
-            </div>
-            <p>Unavailable signals remain visible so missing data is clear.</p>
-          </section>
-        )}
-      </main>
-      <footer>
-        {replay ? "Replay data" : "Live CAN receiver"} · Receive only
-      </footer>
-    </>
+                </ion-checkbox>
+              </ion-item>
+            ))}
+          </ion-list>
+          <p class="supporting ion-padding">
+            Unavailable signals stay visible so missing data remains clear.
+          </p>
+        </ion-content>
+      </ion-modal>
+      <ion-modal
+        isOpen={editKey !== null}
+        onionModalDidDismiss={() => setEditKey(null)}
+      >
+        <ion-header>
+          <ion-toolbar>
+            <ion-title>
+              {catalog.find((d) => d.key === editKey)?.label || "Dial limits"}
+            </ion-title>
+            <ion-buttons slot="end">
+              <ion-button onClick={() => setEditKey(null)}>Cancel</ion-button>
+              <ion-button disabled={busy} onClick={saveRange}>
+                Save
+              </ion-button>
+            </ion-buttons>
+          </ion-toolbar>
+        </ion-header>
+        <ion-content color="light">
+          <ion-list inset>
+            <ion-item>
+              <ion-toggle
+                checked={rangeAuto}
+                onionChange={(e) => setRangeAuto(e.detail.checked)}
+              >
+                Use default dial range
+              </ion-toggle>
+            </ion-item>
+            {!rangeAuto && (
+              <>
+                <ion-item>
+                  <ion-input
+                    label="Minimum"
+                    type="number"
+                    value={rangeMin}
+                    onionInput={(e) => setRangeMin(e.detail.value || "")}
+                  />
+                </ion-item>
+                <ion-item>
+                  <ion-input
+                    label="Maximum"
+                    type="number"
+                    value={rangeMax}
+                    onionInput={(e) => setRangeMax(e.detail.value || "")}
+                  />
+                </ion-item>
+              </>
+            )}
+          </ion-list>
+          <p class="supporting ion-padding">
+            Limits use{" "}
+            {displayUnit(
+              catalog.find((d) => d.key === editKey)?.unit || "",
+              layout.units,
+            )}
+            . They change the dial display, not vehicle limits or recorded
+            values.
+          </p>
+          {formError && (
+            <p class="ion-padding" role="alert">
+              {formError}
+            </p>
+          )}
+        </ion-content>
+      </ion-modal>
+    </ion-app>
   );
 }
 render(<App />, document.getElementById("app")!);
