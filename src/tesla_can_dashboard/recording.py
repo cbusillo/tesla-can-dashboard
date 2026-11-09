@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -48,7 +49,8 @@ def read_frames(path: Path) -> Iterator[Frame]:
                 raise ValueError("Recording contains an invalid CAN payload")
             if not isinstance(timestamp, (int, float)):
                 raise ValueError("Recording contains an invalid timestamp")
-            if isinstance(timestamp, bool) or not math.isfinite(timestamp):
+            source_time = cast(float | int, timestamp)
+            if isinstance(timestamp, bool) or not math.isfinite(source_time):
                 raise ValueError("Recording contains an invalid timestamp")
             if not isinstance(monotonic, int):
                 raise ValueError("Recording contains an invalid timestamp")
@@ -58,7 +60,7 @@ def read_frames(path: Path) -> Iterator[Frame]:
                 data = bytes.fromhex(payload)
             except ValueError:
                 raise ValueError("Recording contains an invalid CAN payload") from None
-            yield Frame(identifier, data, timestamp, monotonic)
+            yield Frame(identifier, data, source_time, cast(int, monotonic))
 
 
 class Recorder:
