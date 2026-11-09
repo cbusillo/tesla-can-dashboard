@@ -16,7 +16,6 @@ ion-card-title {
 ion-select {
   width: 100%;
 }
-.supporting,
 .quality {
   font-size: 14px;
   color: var(--ion-color-medium);

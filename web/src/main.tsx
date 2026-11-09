@@ -38,6 +38,8 @@ import {
   displayUnit,
   initialLayout,
   holdSnapshot,
+  readingStatus,
+  sourceStatus,
   type Definition,
   type Layout,
   type Reading,
@@ -62,7 +64,7 @@ function useDashboard() {
   const [data, setData] = useState<Snapshot | null>(null),
     [catalog, setCatalog] = useState<Definition[]>([]),
     [layout, setLayout] = useState(initialLayout),
-    [connectionError, setConnectionError] = useState(""),
+    [offline, setOffline] = useState(false),
     [actionError, setActionError] = useState(""),
     [busy, setBusy] = useState(false),
     [ready, setReady] = useState(false);
@@ -113,7 +115,7 @@ function useDashboard() {
         }
         revision.current = next.reloadRevision;
         acceptSnapshot(next);
-        setConnectionError("");
+        setOffline(false);
         loadMetadata();
         updates++;
         timings.push(performance.now() - started);
@@ -129,7 +131,7 @@ function useDashboard() {
           }).catch(() => {});
       } catch {
         if (alive) {
-          setConnectionError("Connection lost. Reconnecting automatically.");
+          setOffline(true);
           const last = lastKnown.current;
           if (last)
             setData(
@@ -179,7 +181,7 @@ function useDashboard() {
     data,
     catalog,
     layout,
-    connectionError,
+    offline,
     actionError,
     setActionError,
     busy: busy || !ready,
@@ -205,11 +207,7 @@ function Row({
       {icon && <ion-icon slot="start" name={icon} color="primary" />}
       <ion-label>
         {label}
-        {reading && reading.quality !== "fresh" && (
-          <p>
-            {reading.quality === "stale" ? "Held reading" : reading.quality}
-          </p>
-        )}
+        {readingStatus(reading) && <p>{readingStatus(reading)}</p>}
       </ion-label>
       <ion-note
         slot="end"
@@ -260,7 +258,7 @@ function App() {
     data,
     catalog,
     layout,
-    connectionError,
+    offline,
     actionError,
     setActionError,
     busy,
@@ -293,18 +291,7 @@ function App() {
   }, [dark]);
   const replay = data?.mode === "replay",
     demo = data?.replay?.source === "demonstration";
-  const status = connectionError
-    ? "Disconnected · reconnecting"
-    : demo
-      ? "Recorded demonstration" +
-        (data?.connection.state === "disconnected" ? " · data gap" : "")
-      : replay
-        ? "Replay · " +
-          (data?.replay?.state || "playing") +
-          (data?.connection.state === "disconnected" ? " · data gap" : "")
-        : data?.connection.state === "connected"
-          ? "Live data · connected"
-          : "Live data · " + (data?.connection.state || "connecting");
+  const status = sourceStatus(data, offline);
   const theme = () => save({ ...layout, theme: dark ? "day" : "night" });
   const navigate = (name: string) => {
     tabs.current?.select(name);
@@ -358,9 +345,7 @@ function App() {
         !Number.isFinite(hi) ||
         lo >= hi
       ) {
-        setFormError(
-          "Enter finite limits with the maximum greater than the minimum.",
-        );
+        setFormError("Minimum must be less than maximum.");
         return;
       }
       ranges[definition.key] = {
@@ -371,6 +356,10 @@ function App() {
     if (await save({ ...layout, ranges })) setEditKey(null);
   }
   const common = { status, toggleTheme: theme };
+  const rangeUnit = displayUnit(
+    catalog.find((d) => d.key === editKey)?.unit || "",
+    layout.units,
+  );
   return (
     <ion-app>
       <ion-text color="dark" id="chart-text" hidden />
@@ -378,9 +367,9 @@ function App() {
       <ion-note color="medium" id="chart-muted" hidden />
       <ion-note color="light" id="chart-track" hidden />
       <ion-note color="tertiary" id="chart-accent" hidden />
-      {(connectionError || actionError || data?.replay?.error) && (
+      {(actionError || data?.replay?.error) && (
         <div class="message" role="alert">
-          {actionError || connectionError || data?.replay?.error}
+          {actionError || data?.replay?.error}
           {actionError && (
             <ion-button
               fill="clear"
@@ -446,10 +435,6 @@ function App() {
                     units={layout.units}
                   />
                 </ion-list>
-                <p class="supporting ion-padding-horizontal">
-                  Current uses the CAN sign; charge/discharge direction is
-                  unverified.
-                </p>
               </ion-col>
               <ion-col size="12" size-md="6">
                 <ion-list-header>
@@ -639,20 +624,9 @@ function App() {
                               />
                             </Suspense>
                           )}
-                        <p class="quality">
-                          {(connectionError ||
-                            data?.connection.state === "disconnected") &&
-                          !replay
-                            ? "Disconnected · "
-                            : ""}
-                          {reading?.quality === "stale"
-                            ? "Held reading"
-                            : reading?.quality || "Waiting"}
-                          {reading?.ageSeconds !== null &&
-                          reading?.ageSeconds !== undefined
-                            ? " · " + reading.ageSeconds.toFixed(1) + " s ago"
-                            : ""}
-                        </p>
+                        {readingStatus(reading) && (
+                          <p class="quality">{readingStatus(reading)}</p>
+                        )}
                       </ion-card-content>
                     </ion-card>
                   </ion-col>
@@ -660,10 +634,6 @@ function App() {
               })}
             </ion-row>
           </ion-grid>
-          <p class="supporting ion-padding-horizontal">
-            History uses received sample times. Dial limits affect the display
-            only.
-          </p>
         </Page>
         <Page name="cells" title="Cell groups" {...common}>
           <ion-list-header>
@@ -718,12 +688,7 @@ function App() {
               <ion-item>
                 <ion-label>
                   <h2>Group {cell.index}</h2>
-                  <p>
-                    {cell.quality}
-                    {cell.ageSeconds !== null
-                      ? " · " + cell.ageSeconds.toFixed(1) + " s ago"
-                      : ""}
-                  </p>
+                  {readingStatus(cell) && <p>{readingStatus(cell)}</p>}
                 </ion-label>
                 <ion-note slot="end" color="dark">
                   {display(cell, "metric", 4)}
@@ -744,7 +709,7 @@ function App() {
               >
                 <ion-label>
                   Group {c.index}
-                  <p>{c.quality}</p>
+                  {readingStatus(c) && <p>{readingStatus(c)}</p>}
                   {selectedCell === c.index &&
                     c.minimum !== null &&
                     c.maximum !== null && (
@@ -762,10 +727,6 @@ function App() {
               </ion-item>
             ))}
           </ion-list>
-          <p class="supporting ion-padding">
-            Group order is numerical, not a map of the pack. Balance alone does
-            not establish battery health or cell age.
-          </p>
         </Page>
         <Page name="sessions" title="Sessions" {...common}>
           <ion-list-header>
@@ -779,7 +740,6 @@ function App() {
                     ? "Recording live telemetry"
                     : "Record a drive or charge"}
                 </h2>
-                <p>Files stay on this device until you remove them.</p>
               </ion-label>
               <ion-button
                 slot="end"
@@ -863,14 +823,8 @@ function App() {
             ))}
           </ion-list>
           {!data?.recording.sessions.length && (
-            <p class="supporting ion-padding">
-              No saved sessions. Start recording when live CAN data is
-              connected.
-            </p>
+            <p class="ion-padding">No recordings</p>
           )}
-          <p class="supporting ion-padding-horizontal">
-            Live recording continues while you review another saved session.
-          </p>
         </Page>
         <Page name="settings" title="Settings" {...common}>
           <ion-list-header>
@@ -904,36 +858,6 @@ function App() {
               <ion-label>Choose instruments</ion-label>
             </ion-item>
           </ion-list>
-          <ion-list-header>
-            <ion-label>About</ion-label>
-          </ion-list-header>
-          <ion-list inset>
-            <ion-item>
-              <ion-label>
-                <h2>Receive-only CAN dashboard</h2>
-                <p>
-                  {demo
-                    ? "Recorded demonstration" +
-                      (data?.connection.state === "disconnected"
-                        ? " · data gap"
-                        : "")
-                    : replay
-                      ? "Reviewing a recording"
-                      : "Listening to the configured CAN interface"}
-                </p>
-              </ion-label>
-            </ion-item>
-            <ion-item>
-              <ion-label>
-                <h2>Current direction unverified</h2>
-                <p>Pack current uses the sign reported on CAN.</p>
-              </ion-label>
-            </ion-item>
-          </ion-list>
-          <p class="supporting ion-padding">
-            Use the dashboard while parked. Browser availability while moving
-            and recovery from vehicle sleep require in-car qualification.
-          </p>
         </Page>
         <ion-tab-bar slot="bottom">
           {[
@@ -983,9 +907,6 @@ function App() {
               </ion-item>
             ))}
           </ion-list>
-          <p class="supporting ion-padding">
-            Unavailable signals stay visible so missing data remains clear.
-          </p>
         </ion-content>
       </ion-modal>
       <ion-modal
@@ -1019,7 +940,7 @@ function App() {
               <>
                 <ion-item>
                   <ion-input
-                    label="Minimum"
+                    label={`Minimum (${rangeUnit})`}
                     type="number"
                     value={rangeMin}
                     onionInput={(e) => setRangeMin(e.detail.value || "")}
@@ -1027,7 +948,7 @@ function App() {
                 </ion-item>
                 <ion-item>
                   <ion-input
-                    label="Maximum"
+                    label={`Maximum (${rangeUnit})`}
                     type="number"
                     value={rangeMax}
                     onionInput={(e) => setRangeMax(e.detail.value || "")}
@@ -1036,15 +957,6 @@ function App() {
               </>
             )}
           </ion-list>
-          <p class="supporting ion-padding">
-            Limits use{" "}
-            {displayUnit(
-              catalog.find((d) => d.key === editKey)?.unit || "",
-              layout.units,
-            )}
-            . They change the dial display, not vehicle limits or recorded
-            values.
-          </p>
           {formError && (
             <p class="ion-padding" role="alert">
               {formError}
