@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="night">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tesla CAN Telemetry &amp; Instrument Deck</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="cockpit-shell" id="app-shell">
+    <!-- ====================================================================
+         TOP TELEMETRY & SCENARIO SPINE (46px)
+         ==================================================================== -->
+    <header class="top-spine" aria-label="Telemetry status and replay scenario controls">
+      <div class="status-cluster">
+        <div class="quality-pill" id="quality-pill" data-quality="connected" role="status" aria-live="polite">
+          <span class="quality-dot" aria-hidden="true"></span>
+          <span id="quality-label">Replay · Connected</span>
+        </div>
+      </div>
+
+      <div class="scenario-strip" role="group" aria-label="Replay timeline scenarios">
+        <button type="button" class="replay-play-btn" id="replay-play-btn" aria-pressed="false" title="Play or pause 25-second scenario loop">
+          <span id="replay-play-icon" aria-hidden="true">▶</span>
+          <span id="replay-time-readout">00s</span>
+        </button>
+        <button type="button" class="scenario-btn" data-scenario-idx="0" aria-pressed="true">
+          <span class="sc-time">0s</span> Live
+        </button>
+        <button type="button" class="scenario-btn" data-scenario-idx="1" aria-pressed="false">
+          <span class="sc-time">10s</span> Unavail
+        </button>
+        <button type="button" class="scenario-btn" data-scenario-idx="2" aria-pressed="false">
+          <span class="sc-time">15s</span> Stale
+        </button>
+        <button type="button" class="scenario-btn" data-scenario-idx="3" aria-pressed="false">
+          <span class="sc-time">20s</span> Offline
+        </button>
+        <button type="button" class="scenario-btn" data-scenario-idx="4" aria-pressed="false">
+          <span class="sc-time">25s</span> Recov
+        </button>
+      </div>
+
+      <div class="spine-actions">
+        <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle day or night display theme">
+          <span id="theme-icon" aria-hidden="true">☀</span>
+          <span id="theme-label">Day mode</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ====================================================================
+         MAIN INSTRUMENT STAGE
+         ==================================================================== -->
+    <main class="stage-container">
+      <!-- ==================================================================
+           VIEW 1: OVERVIEW (Configurable Binnacle + Pack Telemetry Bay)
+           ================================================================== -->
+      <section class="view-panel is-active" id="view-overview" role="tabpanel" aria-labelledby="tab-overview">
+        <div class="overview-grid">
+          <!-- Left Column: tesLAX-Style Configurable Instrument Binnacle -->
+          <div class="panel-surface">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span>Configurable instruments</span>
+              </div>
+              <span class="panel-subtitle">tesLAX-style slots</span>
+            </div>
+
+            <div class="binnacle-body">
+              <div class="radial-pair">
+                <!-- Gauge Slot 1 -->
+                <div class="gauge-well" id="gauge-well-1" data-signal-state="valid">
+                  <div class="gauge-slot-header">
+                    <select class="gauge-select" id="gauge-select-1" aria-label="Instrument slot 1 signal">
+                      <option value="voltageV" selected>Pack voltage (V)</option>
+                      <option value="displayedChargePercent">Displayed charge (%)</option>
+                      <option value="currentA">Bus current (A)</option>
+                      <option value="fullPackEnergyKwh">Pack energy (kWh)</option>
+                      <option value="cellSpreadMv">Cell spread (mV)</option>
+                      <option value="tempWindowC">Temp window (°C)</option>
+                    </select>
+                  </div>
+                  <div class="gauge-svg-wrap" id="gauge-svg-wrap-1"></div>
+                  <div class="gauge-footer">
+                    <span id="gauge-range-1">300–405 V</span>
+                    <span id="gauge-state-1">Valid</span>
+                  </div>
+                </div>
+
+                <!-- Gauge Slot 2 -->
+                <div class="gauge-well" id="gauge-well-2" data-signal-state="valid">
+                  <div class="gauge-slot-header">
+                    <select class="gauge-select" id="gauge-select-2" aria-label="Instrument slot 2 signal">
+                      <option value="voltageV">Pack voltage (V)</option>
+                      <option value="displayedChargePercent" selected>Displayed charge (%)</option>
+                      <option value="currentA">Bus current (A)</option>
+                      <option value="fullPackEnergyKwh">Pack energy (kWh)</option>
+                      <option value="cellSpreadMv">Cell spread (mV)</option>
+                      <option value="tempWindowC">Temp window (°C)</option>
+                    </select>
+                  </div>
+                  <div class="gauge-svg-wrap" id="gauge-svg-wrap-2"></div>
+                  <div class="gauge-footer">
+                    <span id="gauge-range-2">0–100 %</span>
+                    <span id="gauge-state-2">Valid</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Gauge Slot 3: Horizontal Linear Bar Instrument -->
+              <div class="strip-gauge-well" id="strip-gauge-well" data-signal-state="valid">
+                <div class="strip-top-row">
+                  <select class="strip-select" id="gauge-select-3" aria-label="Instrument slot 3 linear bar signal">
+                    <option value="fullPackEnergyKwh" selected>Pack energy (kWh)</option>
+                    <option value="cellSpreadMv">Cell spread (mV)</option>
+                    <option value="tempWindowC">Temp window (°C)</option>
+                    <option value="voltageV">Pack voltage (V)</option>
+                    <option value="displayedChargePercent">Displayed charge (%)</option>
+                    <option value="currentA">Bus current (A)</option>
+                  </select>
+                  <div class="strip-readout" id="strip-readout-3">80.5 kWh</div>
+                </div>
+                <div class="strip-bar-track">
+                  <div class="strip-bar-fill" id="strip-bar-fill-3" style="width: 80.5%;"></div>
+                </div>
+                <div class="strip-scale-row">
+                  <span id="strip-min-3">0 kWh</span>
+                  <span id="strip-note-3">Nominal full capacity</span>
+                  <span id="strip-max-3">100 kWh</span>
+                </div>
+              </div>
+
+              <!-- Quick Instrument Presets -->
+              <div class="preset-bar" role="group" aria-label="Instrument configuration presets">
+                <button type="button" class="preset-btn" data-preset="electrical" aria-pressed="true">Electrical</button>
+                <button type="button" class="preset-btn" data-preset="cells" aria-pressed="false">Cell balance</button>
+                <button type="button" class="preset-btn" data-preset="thermal" aria-pressed="false">Thermal &amp; SOC</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Pack Vitals, Energy/Thermal & 25s Replay Trace -->
+          <div class="panel-surface">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span>Pack telemetry &amp; replay horizon</span>
+              </div>
+              <span class="panel-subtitle" id="fixture-source-label">Sanitized parked battery capture</span>
+            </div>
+
+            <div class="telemetry-bay-body">
+              <!-- Dynamic Replay & Signal Quality State Banner -->
+              <div class="state-banner" id="overview-state-banner" data-state="connected">
+                <span id="overview-state-text">Stream connected at t=0s — all pack and cell frames fresh.</span>
+                <button type="button" class="state-banner-action" id="overview-state-action-btn">Step to 10s Unavail</button>
+              </div>
+
+              <!-- Primary 3-Channel Strip: Voltage, Current (unqualified direction), Charge -->
+              <div class="primary-channels">
+                <div class="channel-block" id="ch-voltage" data-state="valid">
+                  <div class="channel-label-row">
+                    <span class="channel-label">Pack voltage</span>
+                    <span class="channel-tag" id="tag-voltage" data-tag="valid">VALID</span>
+                  </div>
+                  <div class="channel-value-row">
+                    <span class="channel-value" id="val-voltage">377.63</span>
+                    <span class="channel-unit" id="unit-voltage">V</span>
+                  </div>
+                  <div class="channel-note" id="note-voltage">96s mean 3.9333 V · Δ 3.6 mV</div>
+                </div>
+
+                <div class="channel-block" id="ch-current" data-state="valid">
+                  <div class="channel-label-row">
+                    <span class="channel-label">Bus current</span>
+                    <span class="channel-tag" id="tag-current" data-tag="valid">Raw sign</span>
+                  </div>
+                  <div class="channel-value-row">
+                    <span class="channel-value" id="val-current">-0.60</span>
+                    <span class="channel-unit" id="unit-current">A</span>
+                  </div>
+                  <div class="channel-note" id="note-current">Direction unqualified · ~0.23 kW magnitude</div>
+                </div>
+
+                <div class="channel-block" id="ch-charge" data-state="valid">
+                  <div class="channel-label-row">
+                    <span class="channel-label">Charge</span>
+                    <span class="channel-tag" id="tag-charge" data-tag="valid">Displayed</span>
+                  </div>
+                  <div class="channel-value-row">
+                    <span class="channel-value" id="val-charge">67.2</span>
+                    <span class="channel-unit" id="unit-charge">%</span>
+                  </div>
+                  <div class="channel-note" id="note-charge">Parked state · buffer-adjusted display</div>
+                </div>
+              </div>
+
+              <!-- Secondary 2-Channel Strip: Full Pack Energy & Battery Temperatures -->
+              <div class="secondary-channels">
+                <div class="channel-block energy-block" id="ch-energy" data-state="valid">
+                  <div class="channel-label-row">
+                    <span class="channel-label">Full pack energy</span>
+                    <span class="channel-tag" id="tag-energy" data-tag="valid">VALID</span>
+                  </div>
+                  <div class="channel-value-row">
+                    <span class="channel-value" id="val-energy">80.5</span>
+                    <span class="channel-unit" id="unit-energy">kWh</span>
+                  </div>
+                  <div class="channel-note" id="note-energy">Est. ~54.1 kWh at 67.2% displayed charge</div>
+                </div>
+
+                <div class="channel-block" id="ch-temp" data-state="valid">
+                  <div class="channel-label-row">
+                    <span class="channel-label">Battery temperatures</span>
+                    <span class="channel-tag" id="tag-temp" data-tag="valid">Δ 3.3 °C</span>
+                  </div>
+                  <div class="channel-value-row">
+                    <span class="channel-value" id="val-temp">18.0 – 21.3</span>
+                    <span class="channel-unit" id="unit-temp">°C</span>
+                  </div>
+                  <div class="temp-bar-wrap">
+                    <div class="temp-bar-track">
+                      <div class="temp-bar-window" id="temp-bar-window" style="left: 36%; width: 12%;"></div>
+                    </div>
+                    <div class="temp-scale-labels">
+                      <span>0°C</span>
+                      <span id="note-temp">Min 18.0°C · Max 21.3°C</span>
+                      <span>50°C</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Short Replay History & Quality Timeline (0s - 25s) -->
+              <div class="history-block">
+                <div class="history-header">
+                  <span class="history-title">25-second replay capture &amp; signal quality timeline (tap timeline to scrub)</span>
+                  <div class="history-legend">
+                    <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-primary);"></span>Valid</span>
+                    <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-amber);"></span>Unavail / Stale</span>
+                    <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-fault);"></span>Disconnect gap</span>
+                  </div>
+                </div>
+                <div class="history-svg-wrap" id="history-svg-wrap"></div>
+                <div class="history-footer">
+                  <span id="history-cursor-note">Cursor at t=0s (Connected) — Absent or disconnected signals show open breaks, never zero.</span>
+                  <span>Mode: Replay only</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           VIEW 2: CELLS (96-Group Spread & Interactive Group Inspector)
+           ================================================================== -->
+      <section class="view-panel" id="view-cells" role="tabpanel" aria-labelledby="tab-cells">
+        <div class="cells-layout">
+          <div class="cells-summary-bar">
+            <div class="spread-metrics">
+              <div class="spread-stat">
+                <span class="spread-stat-label">Nominal spread (96 groups)</span>
+                <span class="spread-stat-val" id="cells-nominal-spread">3.6 mV · 3.9309–3.9345 V</span>
+              </div>
+              <div class="spread-stat">
+                <span class="spread-stat-label">Min–max envelope</span>
+                <span class="spread-stat-val" id="cells-envelope-spread">3.9 mV · 3.9307–3.9346 V</span>
+              </div>
+              <div class="spread-stat">
+                <span class="spread-stat-label">Pack mean</span>
+                <span class="spread-stat-val" id="cells-mean-val">3.9334 V</span>
+              </div>
+            </div>
+
+            <div class="cells-toolbar">
+              <button type="button" class="cell-jump-btn" id="btn-jump-min" title="Select lowest voltage cell group #01">
+                Min #01
+              </button>
+              <button type="button" class="cell-jump-btn" id="btn-jump-max" title="Select highest voltage cell group #24">
+                Max #24
+              </button>
+              <button type="button" class="cell-jump-btn" id="btn-cells-matrix" aria-pressed="true">
+                4×24 Matrix
+              </button>
+              <button type="button" class="cell-jump-btn" id="btn-cells-profile" aria-pressed="false">
+                96-Bar Profile
+              </button>
+            </div>
+          </div>
+
+          <div class="cells-main-grid">
+            <!-- Left: 96-Cell Matrix or 96-Bar Profile Chart -->
+            <div class="panel-surface cells-matrix-panel">
+              <div class="banks-container" id="cells-banks-container" aria-label="96 cell groups organized in 4 banks of 24"></div>
+              <div class="profile-chart-wrap" id="cells-profile-wrap">
+                <div class="history-header">
+                  <span class="history-title">All 96 cell groups: recorded [minimumV – voltageV – maximumV] envelope across pack</span>
+                  <span class="panel-subtitle">Tap any group bar to inspect</span>
+                </div>
+                <div id="cells-profile-svg-host" style="flex:1; min-height:0; display:flex; align-items:center;"></div>
+                <div class="history-footer">
+                  <span>Groups 01–23: lower thermal/voltage band (~3.931–3.933V) · Groups 24–73: plateau (~3.934V) · Groups 74–96: rear band (~3.932–3.933V)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Selected Cell Group Detail Inspector -->
+            <div class="panel-surface cell-inspector" aria-label="Selected cell group detail inspector">
+              <div class="inspector-nav-row">
+                <button type="button" class="inspector-step-btn" id="cell-prev-btn" aria-label="Previous cell group">← Prev</button>
+                <span class="inspector-group-title" id="insp-group-title">Group #01 / 96</span>
+                <button type="button" class="inspector-step-btn" id="cell-next-btn" aria-label="Next cell group">Next →</button>
+              </div>
+
+              <div class="inspector-hero">
+                <span class="spread-stat-label">Selected group voltage (voltageV)</span>
+                <div class="inspector-voltage" id="insp-voltage-main">3.9309 V</div>
+                <div class="inspector-badges" id="insp-badges">
+                  <span class="inspector-badge">Pack Lowest Group</span>
+                  <span class="inspector-badge">Bank 1 (01–24)</span>
+                </div>
+              </div>
+
+              <div class="inspector-table">
+                <div class="insp-row">
+                  <span class="insp-key">Minimum (minimumV)</span>
+                  <span class="insp-val" id="insp-min-v">3.9307 V</span>
+                </div>
+                <div class="insp-row">
+                  <span class="insp-key">Maximum (maximumV)</span>
+                  <span class="insp-val" id="insp-max-v">3.9310 V</span>
+                </div>
+                <div class="insp-row">
+                  <span class="insp-key">Intra-group window</span>
+                  <span class="insp-val" id="insp-window-mv">0.3 mV</span>
+                </div>
+                <div class="insp-row">
+                  <span class="insp-key">Vs. pack mean</span>
+                  <span class="insp-val" id="insp-delta-mean">-2.4 mV</span>
+                </div>
+                <div class="insp-row">
+                  <span class="insp-key">Vs. pack min / max</span>
+                  <span class="insp-val" id="insp-delta-minmax">+0.0 / -3.6 mV</span>
+                </div>
+                <div class="insp-row">
+                  <span class="insp-key">Signal state</span>
+                  <span class="insp-val" id="insp-state">valid</span>
+                </div>
+              </div>
+
+              <div class="inspector-envelope-box">
+                <span class="spread-stat-label">Group window in pack envelope</span>
+                <div id="insp-envelope-svg-host"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           VIEW 3: PERFORMANCE (Simulated Acceleration & Power Result View)
+           ================================================================== -->
+      <section class="view-panel" id="view-performance" role="tabpanel" aria-labelledby="tab-performance">
+        <div class="perf-layout">
+          <div class="sim-disclosure-banner">
+            <span class="sim-badge-pill">Simulated result</span>
+            <span class="sim-banner-text" id="perf-note-banner">Fictional UI examples, not measured vehicle results (mode: simulated)</span>
+            <span class="sim-convention-pill" id="perf-rollout-pill">Rollout convention: none (0 ft subtracted)</span>
+          </div>
+
+          <div class="perf-metrics-row">
+            <div class="perf-card">
+              <div class="perf-card-top">
+                <span class="perf-card-title">0–60 mph time</span>
+                <span class="perf-sim-tag">Simulated</span>
+              </div>
+              <div class="perf-value-line">
+                <span class="perf-big-num" id="perf-0to60-val">4.9</span>
+                <span class="perf-big-unit">seconds (mph)</span>
+              </div>
+              <div class="perf-convention-detail">
+                <span>Interval: 0 to 60 mph</span>
+                <span id="perf-0to60-conv">Rollout: none</span>
+              </div>
+            </div>
+
+            <div class="perf-card">
+              <div class="perf-card-top">
+                <span class="perf-card-title">Quarter-mile elapsed</span>
+                <span class="perf-sim-tag">Simulated</span>
+              </div>
+              <div class="perf-value-line">
+                <span class="perf-big-num" id="perf-quarter-val">13.2</span>
+                <span class="perf-big-unit">seconds (1/4 mi)</span>
+              </div>
+              <div class="perf-convention-detail">
+                <span>Distance: 1/4 mile (402.3 m)</span>
+                <span>Rollout: none</span>
+              </div>
+            </div>
+
+            <div class="perf-card">
+              <div class="perf-card-top">
+                <span class="perf-card-title">Peak battery power</span>
+                <span class="perf-sim-tag">Simulated</span>
+              </div>
+              <div class="perf-value-line">
+                <span class="perf-big-num" id="perf-power-val">280</span>
+                <span class="perf-big-unit">kW (DC bus)</span>
+              </div>
+              <div class="perf-convention-detail">
+                <span>~375 hp electrical eq.</span>
+                <span>Simulated peak</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="perf-bottom-split">
+            <div class="panel-surface perf-curve-box">
+              <div class="history-header">
+                <span class="panel-title">Simulated acceleration &amp; power envelope (0.0 s – 13.2 s)</span>
+                <div class="cells-toolbar">
+                  <button type="button" class="cell-jump-btn" id="btn-rollout-none" aria-pressed="true">Rollout: none (4.9 s)</button>
+                  <button type="button" class="cell-jump-btn" id="btn-rollout-1ft" aria-pressed="false">Compare 1-ft rollout note</button>
+                </div>
+              </div>
+              <div id="perf-curve-svg-host" style="flex:1; min-height:0; display:flex; align-items:center;"></div>
+              <div class="history-footer">
+                <span id="perf-curve-caption">Standing start (rollout: none) clocks from initial movement; 0–60 mph reached at 4.9 s, 1/4 mile at 13.2 s.</span>
+              </div>
+            </div>
+
+            <div class="panel-surface perf-notes-box">
+              <div class="panel-title">Timing conventions &amp; replay context</div>
+              <div class="convention-list">
+                <div class="convention-item">
+                  <strong>Simulated mode &amp; timing convention</strong>
+                  Figures come from <code>performanceDemo</code> (<code>mode: "simulated"</code>, <code>rollout: "none"</code>). No 1-foot dragstrip rollout is subtracted from the 4.9 s 0–60 mph or 13.2 s quarter-mile examples.
+                </div>
+                <div class="convention-item">
+                  <strong>Parked replay vs. simulated peak</strong>
+                  Current replay fixture is a parked capture (<span id="perf-live-context">377.63 V, -0.60 A, 67.2% SOC, 18.0–21.3 °C</span>). No dynamic launch was recorded in this capture.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           VIEW 4: CONVENIENCE CONTROLS (Simulated Pending / Confirmed / Unconfirmed)
+           ================================================================== -->
+      <section class="view-panel" id="view-controls" role="tabpanel" aria-labelledby="tab-controls">
+        <div class="controls-layout">
+          <div class="controls-guard-bar">
+            <div class="guard-left">
+              <span class="guard-lock-pill">Simulated · Receive-only (realCommandsAllowed: false)</span>
+              <span class="guard-desc">Actions simulate UI states (pending, confirmed, unconfirmed) only; no CAN frames are transmitted.</span>
+            </div>
+            <div class="cells-toolbar">
+              <button type="button" class="cell-jump-btn" id="btn-controls-cycle">Demo all outcomes</button>
+              <button type="button" class="cell-jump-btn" id="btn-controls-reset">Reset tiles</button>
+            </div>
+          </div>
+
+          <div class="controls-grid" id="controls-tiles-grid">
+            <!-- Populated and bound by app.js from fixture.controlDemo -->
+          </div>
+
+          <div class="controls-log-bar">
+            <span class="spread-stat-label" style="white-space:nowrap;">Simulated action log:</span>
+            <div class="log-entries" id="controls-log-entries" aria-live="polite">
+              <span class="log-chip">[SIMULATED · NO TX] Ready — tap any tile to simulate pending / confirmed / unconfirmed outcomes.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ====================================================================
+         BOTTOM TOUCH NAVIGATION DOCK (52px)
+         ==================================================================== -->
+    <nav class="bottom-dock" aria-label="Dashboard primary views">
+      <div class="nav-tabs" role="tablist">
+        <button type="button" class="nav-tab-btn" id="tab-overview" role="tab" aria-selected="true" aria-controls="view-overview" data-view="overview">
+          <span>Overview</span>
+          <span class="nav-tab-count">Gauges</span>
+        </button>
+        <button type="button" class="nav-tab-btn" id="tab-cells" role="tab" aria-selected="false" aria-controls="view-cells" data-view="cells">
+          <span>Cells</span>
+          <span class="nav-tab-count">96 groups</span>
+        </button>
+        <button type="button" class="nav-tab-btn" id="tab-performance" role="tab" aria-selected="false" aria-controls="view-performance" data-view="performance">
+          <span>Performance</span>
+          <span class="nav-tab-count">Simulated</span>
+        </button>
+        <button type="button" class="nav-tab-btn" id="tab-controls" role="tab" aria-selected="false" aria-controls="view-controls" data-view="controls">
+          <span>Convenience</span>
+          <span class="nav-tab-count">Simulated</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
