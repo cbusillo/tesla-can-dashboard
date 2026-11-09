@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" data-theme="night">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battery sheet</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- Single-stroke drafting numerals on a 60 by 100 grid. Stale data dashes these strokes. -->
+    <path id="d0" d="M30 6C14 6 8 20 8 50s6 44 22 44 22-14 22-44S46 6 30 6Z"/>
+    <path id="d1" d="M12 24 31 6v88"/>
+    <path id="d2" d="M10 26C10 13 19 6 30 6c13 0 21 8 21 20 0 14-11 26-21 36L9 94h44"/>
+    <path id="d3" d="M10 18c4-8 11-12 20-12 13 0 20 7 20 19 0 13-8 21-23 21 17 0 26 8 26 23 0 16-10 25-23 25-10 0-18-4-22-14"/>
+    <path id="d4" d="M41 94V6L7 68h48"/>
+    <path id="d5" d="M48 6H15l-3 38c5-4 12-6 19-6 14 0 22 10 22 27 0 18-9 29-23 29-10 0-18-4-22-13"/>
+    <path id="d6" d="M48 10c-4-3-10-4-15-4C16 6 8 26 8 58c0 24 9 36 23 36s22-10 22-25-9-25-22-25c-11 0-19 6-23 16"/>
+    <path id="d7" d="M8 6h44L23 94"/>
+    <path id="d8" d="M30 46c-11 0-18-7-18-19C12 14 19 6 30 6s18 8 18 21c0 12-7 19-18 19-13 0-21 9-21 24 0 15 9 24 21 24s21-9 21-24c0-15-8-24-21-24Z"/>
+    <path id="d9" d="M12 90c4 3 10 4 15 4 17 0 25-20 25-52C52 18 43 6 29 6S7 16 7 31s9 25 22 25c11 0 19-6 23-16"/>
+    <path id="dm" d="M6 52h44"/>
+    <circle id="dp" cx="11" cy="88" r="6"/>
+
+    <pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="9" height="9" fill="none"/>
+      <line x1="0" y1="0" x2="0" y2="9" class="hatch-line"/>
+    </pattern>
+
+    <pattern id="hatch-stale" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="9" class="hatch-stale-line"/>
+    </pattern>
+
+    <marker id="arw" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="11" markerHeight="11" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+      <path d="M0 1.5 10 5 0 8.5Z" class="arw-head"/>
+    </marker>
+  </defs>
+</svg>
+
+<div id="app">
+  <nav id="rail" aria-label="Sheets">
+    <div id="tabs"></div>
+    <div id="theme" role="group" aria-label="Display brightness"></div>
+  </nav>
+  <main id="sheet"></main>
+  <footer id="strip" aria-label="Replay controls"></footer>
+</div>
+
+<div id="picker" hidden></div>
+
+<script src="app.js" defer></script>
+</body>
+</html>
