@@ -292,8 +292,7 @@ function App() {
     document.documentElement.classList.toggle("ion-palette-dark", dark);
   }, [dark]);
   const replay = data?.mode === "replay",
-    demo = data?.replay?.source === "demonstration",
-    connected = !connectionError && data?.connection.state === "connected";
+    demo = data?.replay?.source === "demonstration";
   const status = connectionError
     ? "Disconnected · reconnecting"
     : demo
@@ -641,7 +640,11 @@ function App() {
                             </Suspense>
                           )}
                         <p class="quality">
-                          {!connected && !replay ? "Disconnected · " : ""}
+                          {(connectionError ||
+                            data?.connection.state === "disconnected") &&
+                          !replay
+                            ? "Disconnected · "
+                            : ""}
                           {reading?.quality === "stale"
                             ? "Held reading"
                             : reading?.quality || "Waiting"}
@@ -735,12 +738,20 @@ function App() {
             {cells.map((c) => (
               <ion-item
                 button
+                color={selectedCell === c.index ? "primary" : undefined}
                 key={c.index}
                 onClick={() => setSelectedCell(c.index)}
               >
                 <ion-label>
                   Group {c.index}
                   <p>{c.quality}</p>
+                  {selectedCell === c.index &&
+                    c.minimum !== null &&
+                    c.maximum !== null && (
+                      <p>
+                        Observed {c.minimum.toFixed(4)}–{c.maximum.toFixed(4)} V
+                      </p>
+                    )}
                 </ion-label>
                 <ion-note
                   slot="end"

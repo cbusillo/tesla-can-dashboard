@@ -201,6 +201,16 @@ export function History({
       convert(point[1], reading?.unit || "", units),
     ]);
   }
+  const values = history
+    .map((point) => point[1])
+    .filter((value): value is number => value !== null);
+  const lowest = values.length ? Math.min(...values) : 0;
+  const highest = values.length ? Math.max(...values) : 1;
+  const padding = Math.max(
+    (highest - lowest) * 0.1,
+    Math.abs(highest) * 0.001,
+    0.01,
+  );
   const option: Option = {
     grid: { left: 48, right: 16, top: 12, bottom: 28 },
     tooltip: {
@@ -217,7 +227,8 @@ export function History({
     },
     yAxis: {
       type: "value",
-      scale: true,
+      min: lowest - padding,
+      max: highest + padding,
       axisLabel: { color: color("chart-muted"), fontSize: 10 },
       splitLine: { lineStyle: { color: color("chart-track") } },
     },
