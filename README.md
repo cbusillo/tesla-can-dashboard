@@ -2,14 +2,16 @@
 
 A lightweight, receive-only dashboard for a Pi connected to Tesla CAN.
 Designed for the in-car browser, including Intel Atom cars. This is an early
-development preview. Independent visual designs are being compared before the
-final interface is selected.
+development preview using Ionic’s standard iOS components and a small set of
+telemetry charts.
 
-The first implementation includes selectable instruments, 96 configurable
-cell groups, recent history, day/night appearance, local session recording,
+The first implementation includes selectable dials, numeric readings and
+recent history, editable dial ranges, 96 configurable cell groups with a
+voltage chart, day/night appearance, local session recording,
 export and replay. Missing, invalid, stale and disconnected data stay distinct
 from zero. The service reconnects when the interface returns. The browser
-reconnects automatically and supports remote page reload at `/control` while
+reconnects automatically, marks held readings when the connection drops, and
+supports remote page reload at `/control` while
 the page is still open.
 
 ## Try the demonstration
@@ -58,4 +60,4 @@ local frontend assets. For frontend development, start the API, then run
 
 Keep real recordings, VINs, pack identifiers, credentials, locations and local
 network configuration out of issues and commits. The included design fixture
-is artificial.
+has no identity or location fields.

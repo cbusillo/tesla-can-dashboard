@@ -23,9 +23,21 @@ def test_layout_survives_restart_and_rejects_unknown_signals(tmp_path) -> None:
         engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
         with TestClient(create_app(engine, tmp_path, allowed_origins={"https://dashboard.example"})) as client:
             if cycle == 0:
-                saved = client.put("/api/layout", json={"theme": "night", "units": "imperial", "instruments": ["voltageV"]})
+                saved = client.put(
+                    "/api/layout",
+                    json={
+                        "theme": "night",
+                        "units": "imperial",
+                        "instruments": ["voltageV"],
+                        "presentation": "history",
+                        "ranges": {"voltageV": {"minimum": 250, "maximum": 450}},
+                    },
+                )
                 assert saved.status_code == 200
-            assert client.get("/api/layout").json()["theme"] == "night"
+            layout = client.get("/api/layout").json()
+            assert layout["theme"] == "night"
+            assert layout["presentation"] == "history"
+            assert layout["ranges"]["voltageV"] == {"minimum": 250, "maximum": 450}
             assert client.put("/api/layout", json={"instruments": ["invented"]}).status_code == 422
             assert (
                 client.put("/api/layout", json={"theme": "day"}, headers={"Origin": "https://unrelated.example"}).status_code == 403
@@ -78,3 +90,29 @@ def test_health_describes_receiver_separately_from_replay(tmp_path, monkeypatch)
         health = client.get("/api/health").json()
         assert health["mode"] == "live"
         assert health["connection"] == "waiting"
+
+
+def test_bad_dial_ranges_do_not_replace_saved_layout(tmp_path) -> None:
+    engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
+    with TestClient(create_app(engine, tmp_path)) as client:
+        original = client.get("/api/layout").json()
+        for ranges in (
+            {"voltageV": {"minimum": 400, "maximum": 300}},
+            {"voltageV": {"minimum": 0, "maximum": float("nan")}},
+            {"invented": {"minimum": 0, "maximum": 100}},
+        ):
+            response = client.put(
+                "/api/layout", content=json.dumps({"ranges": ranges}), headers={"Content-Type": "application/json"}
+            )
+            assert response.status_code == 422
+        assert client.get("/api/layout").json() == original
+
+
+def test_previous_layout_loads_without_replacing_instrument_choices(tmp_path) -> None:
+    legacy = {"theme": "day", "units": "imperial", "instruments": ["currentA", "voltageV"]}
+    (tmp_path / "layout.json").write_text(json.dumps(legacy))
+    engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
+    with TestClient(create_app(engine, tmp_path)) as client:
+        loaded = client.get("/api/layout").json()
+        assert all(loaded[key] == value for key, value in legacy.items())
+        assert "presentation" in loaded and "ranges" in loaded
