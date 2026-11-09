@@ -99,7 +99,12 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"status": "ok", "receiveOnly": True, "connection": engine.snapshot()["connection"]["state"]}
+        return {
+            "status": "ok",
+            "receiveOnly": True,
+            "mode": "live" if engine.interface else "demonstration",
+            "connection": engine.store.snapshot()["connection"]["state"] if engine.interface else "not-connected",
+        }
 
     @app.get("/api/snapshot")
     @app.get("/snapshot")

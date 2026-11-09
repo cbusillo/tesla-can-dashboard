@@ -64,7 +64,11 @@ async function api<T>(
   }
   return response.json();
 }
-function display(reading: Reading | undefined, units: string) {
+function display(
+  reading: Reading | undefined,
+  units: string,
+  decimals?: number,
+) {
   if (!reading || reading.value === null || reading.quality === "invalid")
     return { value: "—", unit: reading?.unit || "" };
   let value = reading.value,
@@ -77,9 +81,15 @@ function display(reading: Reading | undefined, units: string) {
     value /= 1.609344;
     unit = "mph";
   }
-  return { value: value.toFixed(unit === "V" ? 2 : 1), unit };
+  return { value: value.toFixed(decimals ?? (unit === "V" ? 2 : 1)), unit };
 }
-function Trace({ reading }: { reading: Reading | undefined }) {
+function Trace({
+  reading,
+  units,
+}: {
+  reading: Reading | undefined;
+  units: string;
+}) {
   const node = useRef<HTMLDivElement>(null),
     plot = useRef<uPlot | null>(null);
   useEffect(() => {
@@ -114,8 +124,17 @@ function Trace({ reading }: { reading: Reading | undefined }) {
   }, []);
   useEffect(() => {
     const points = reading?.history || [];
-    plot.current?.setData([points.map((p) => p[0]), points.map((p) => p[1])]);
-  }, [reading]);
+    plot.current?.setData([
+      points.map((p) => p[0]),
+      points.map((p) =>
+        reading?.unit === "°C" && units === "imperial"
+          ? (p[1] * 9) / 5 + 32
+          : reading?.unit === "km/h" && units === "imperial"
+            ? p[1] / 1.609344
+            : p[1],
+      ),
+    ]);
+  }, [reading, units]);
   return <div ref={node} aria-label="Recent signal history" />;
 }
 function App() {
@@ -124,6 +143,7 @@ function App() {
     [layout, setLayout] = useState(initialLayout),
     [tab, setTab] = useState("Overview"),
     [error, setError] = useState(""),
+    [actionError, setActionError] = useState(""),
     [selected, setSelected] = useState("voltageV"),
     [cell, setCell] = useState<number | null>(null),
     [pending, setPending] = useState(false);
@@ -136,10 +156,10 @@ function App() {
     let timer: ReturnType<typeof setTimeout>;
     api<{ signals: Definition[] }>("catalog")
       .then((v) => setCatalog(v.signals))
-      .catch((e) => setError(e.message));
+      .catch((e) => setActionError(e.message));
     api<Layout>("layout")
       .then(setLayout)
-      .catch((e) => setError(e.message));
+      .catch((e) => setActionError(e.message));
     async function poll() {
       try {
         const started = performance.now(),
@@ -187,9 +207,9 @@ function App() {
     try {
       await api(path, method, body);
       setData(await api<Snapshot>("snapshot"));
-      setError("");
+      setActionError("");
     } catch (e) {
-      setError((e as Error).message);
+      setActionError((e as Error).message);
     } finally {
       setPending(false);
     }
@@ -198,8 +218,9 @@ function App() {
     try {
       await api("layout", "PUT", next);
       setLayout(next);
+      setActionError("");
     } catch (e) {
-      setError((e as Error).message);
+      setActionError((e as Error).message);
     }
   }
   const replay = data?.mode === "replay",
@@ -220,6 +241,12 @@ function App() {
       {error && (
         <div class="alert" role="alert">
           {error}
+        </div>
+      )}
+      {actionError && (
+        <div class="alert" role="alert">
+          {actionError}{" "}
+          <button onClick={() => setActionError("")}>Dismiss</button>
         </div>
       )}
       {data?.replay?.error && (
@@ -270,7 +297,7 @@ function App() {
               <h2>
                 {catalog.find((d) => d.key === selected)?.label || selected}
               </h2>
-              <Trace reading={data?.signals[selected]} />
+              <Trace reading={data?.signals[selected]} units={layout.units} />
               <p>
                 Recent 2 minutes.{" "}
                 {data?.signals[selected]?.ageSeconds !== null &&
@@ -313,13 +340,13 @@ function App() {
                   onClick={() => setCell(c.index)}
                 >
                   <span>{c.index}</span>
-                  <strong>{display(c, "metric").value}</strong>
+                  <strong>{display(c, "metric", 4).value}</strong>
                 </button>
               ))}
             </div>
             <p>
               {selectedCell
-                ? `Group ${selectedCell.index}: ${display(selectedCell, "metric").value} V, ${selectedCell.quality}.`
+                ? `Group ${selectedCell.index}: ${display(selectedCell, "metric", 4).value} V, ${selectedCell.quality}.`
                 : "Tap a cell group to inspect it."}
             </p>
             <p class="note">

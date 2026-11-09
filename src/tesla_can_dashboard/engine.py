@@ -28,6 +28,8 @@ class Engine:
         self.replay_stop = threading.Event()
         self.replay_store: SignalStore | None = None
         self.replay_time = 0.0
+        self.replay_clock = time.monotonic()
+        self.replay_rate = 1.0
         self.replay_state = "stopped"
         self.replay_id: str | None = None
         self.replay_error: str | None = None
@@ -49,14 +51,17 @@ class Engine:
 
     def close(self) -> None:
         self.stop_event.set()
-        self.stop_replay()
-        if self.thread:
-            self.thread.join(timeout=3)
-        self.recorder.stop()
+        try:
+            self.stop_replay()
+        finally:
+            if self.thread:
+                self.thread.join(timeout=3)
+            self.recorder.stop()
 
     def ingest(self, frame: Frame) -> None:
         if frame.identifier not in self.decoder.frame_ids:
             return
+        self.recorder.append(frame)
         try:
             values, cells = self.decoder.decode(frame.identifier, frame.data)
         except (ValueError, cantools.database.errors.DecodeError):
@@ -64,7 +69,6 @@ class Engine:
                 self.store.decode_errors += 1
             return
         self.store.update(values, cells, frame.timestamp, now=frame.monotonic_ns / 1e9)
-        self.recorder.append(frame)
 
     def _receive(self) -> None:
         while not self.stop_event.is_set():
@@ -83,10 +87,11 @@ class Engine:
                         if len(packet) != 16:
                             continue
                         identifier, length, payload = struct.unpack("=IB3x8s", packet)
-                        if identifier & 0x60000000 or length > 8:
+                        if identifier & 0xE0000000 or length > 8:
                             continue
                         self.ingest(Frame(identifier & 0x1FFFFFFF, payload[:length], timestamp, acquired_ns))
             except OSError:
+                LOGGER.exception("CAN receiver interrupted")
                 with self.store.lock:
                     self.store.receiver_error = "CAN receiver is unavailable; waiting for the interface"
                 self.stop_event.wait(1)
@@ -112,7 +117,10 @@ class Engine:
     def snapshot(self) -> dict:
         replay_store = self.replay_store
         if replay_store is not None:
-            snapshot = replay_store.snapshot(now=self.replay_time)
+            replay_now = self.replay_time
+            if self.replay_state == "playing":
+                replay_now += max(0, time.monotonic() - self.replay_clock) * self.replay_rate
+            snapshot = replay_store.snapshot(now=replay_now)
             snapshot["mode"] = "replay"
             snapshot["replay"] = {"state": self.replay_state, "source": self.replay_id, "error": self.replay_error}
         elif self.demo is not None:
@@ -137,6 +145,8 @@ class Engine:
         self.replay_stop.clear()
         self.replay_store = SignalStore(self.store.cell_count)
         self.replay_time = 0
+        self.replay_clock = time.monotonic()
+        self.replay_rate = rate
         self.replay_state = "playing"
         self.replay_id = session_id
         self.replay_error = None
@@ -154,8 +164,14 @@ class Engine:
                     if self.replay_stop.wait(delay):
                         return
                 previous = frame.monotonic_ns
-                values, cells = self.decoder.decode(frame.identifier, frame.data)
                 self.replay_time = frame.monotonic_ns / 1e9
+                self.replay_clock = time.monotonic()
+                try:
+                    values, cells = self.decoder.decode(frame.identifier, frame.data)
+                except (ValueError, cantools.database.errors.DecodeError):
+                    with store.lock:
+                        store.decode_errors += 1
+                    continue
                 store.update(values, cells, frame.timestamp, now=self.replay_time)
             self.replay_state = "finished"
         except (OSError, ValueError, cantools.database.errors.DecodeError):

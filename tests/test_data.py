@@ -110,3 +110,43 @@ def test_recording_is_independent_of_replay_and_ignores_unselected_identifiers(t
     recorder.stop()
     assert [value.identifier for value in read_frames(recorder.path(second))] == [0x132]
     engine.close()
+
+
+def test_replay_gap_ages_signals_and_reports_disconnection(tmp_path) -> None:
+    recorder = Recorder(tmp_path, reserve_bytes=0)
+    session = recorder.start()
+    first = frame()
+    recorder.append(first)
+    recorder.append(Frame(first.identifier, first.data, first.timestamp + 20, first.monotonic_ns + 20_000_000_000))
+    recorder.stop()
+    engine = Engine("can0", recorder)
+    try:
+        engine.start_replay(session)
+        deadline = time.monotonic() + 1
+        while engine.replay_store.frames == 0 and time.monotonic() < deadline:
+            time.sleep(0.001)
+        assert engine.replay_store.frames == 1
+        engine.replay_clock -= 10
+        data = engine.snapshot()
+        assert data["signals"]["voltageV"]["quality"] == "stale"
+        assert data["connection"]["state"] == "disconnected"
+    finally:
+        engine.close()
+
+
+def test_bad_selected_frames_are_recorded_and_replay_continues(tmp_path) -> None:
+    recorder = Recorder(tmp_path, reserve_bytes=0)
+    session = recorder.start()
+    engine = Engine("can0", recorder)
+    good = frame()
+    engine.ingest(Frame(good.identifier, b"bad", good.timestamp, good.monotonic_ns))
+    engine.ingest(good)
+    recorder.stop()
+    assert len(list(read_frames(recorder.path(session)))) == 2
+    assert engine.store.decode_errors == 1
+    engine.start_replay(session)
+    engine.replay_thread.join(timeout=1)
+    assert engine.replay_state == "finished"
+    assert engine.replay_store.frames == 1
+    assert engine.replay_store.decode_errors == 1
+    engine.close()

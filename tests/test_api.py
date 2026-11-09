@@ -68,3 +68,13 @@ def test_bad_browser_report_cannot_break_report_history(tmp_path) -> None:
             == 400
         )
         assert len(client.get("/api/browser-checks").json()["checks"]) == 1
+
+
+def test_health_describes_receiver_separately_from_replay(tmp_path, monkeypatch) -> None:
+    engine = Engine("can0", Recorder(tmp_path / "sessions", reserve_bytes=0))
+    monkeypatch.setattr(engine, "start", lambda: None)
+    monkeypatch.setattr(engine, "snapshot", lambda: {"connection": {"state": "connected"}, "mode": "replay"})
+    with TestClient(create_app(engine, tmp_path)) as client:
+        health = client.get("/api/health").json()
+        assert health["mode"] == "live"
+        assert health["connection"] == "waiting"
