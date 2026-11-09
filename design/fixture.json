@@ -1,0 +1,733 @@
+{
+  "schemaVersion": 1,
+  "source": "sanitized parked battery capture; no identity or location fields",
+  "mode": "replay",
+  "state": "connected",
+  "values": {
+    "displayedChargePercent": 67.2,
+    "voltageV": 377.63,
+    "currentA": -0.6000000000000001,
+    "fullPackEnergyKwh": 80.5,
+    "minimumTemperatureC": 18.0,
+    "maximumTemperatureC": 21.300000000000004
+  },
+  "cellGroups": [
+    {
+      "index": 1,
+      "voltageV": 3.9309,
+      "minimumV": 3.9307,
+      "maximumV": 3.931,
+      "state": "valid"
+    },
+    {
+      "index": 2,
+      "voltageV": 3.9312,
+      "minimumV": 3.931,
+      "maximumV": 3.9312,
+      "state": "valid"
+    },
+    {
+      "index": 3,
+      "voltageV": 3.9319,
+      "minimumV": 3.9319,
+      "maximumV": 3.9321,
+      "state": "valid"
+    },
+    {
+      "index": 4,
+      "voltageV": 3.9318,
+      "minimumV": 3.9318,
+      "maximumV": 3.9319,
+      "state": "valid"
+    },
+    {
+      "index": 5,
+      "voltageV": 3.9313,
+      "minimumV": 3.9312,
+      "maximumV": 3.9315,
+      "state": "valid"
+    },
+    {
+      "index": 6,
+      "voltageV": 3.9312,
+      "minimumV": 3.931,
+      "maximumV": 3.9313,
+      "state": "valid"
+    },
+    {
+      "index": 7,
+      "voltageV": 3.9315,
+      "minimumV": 3.9315,
+      "maximumV": 3.9316,
+      "state": "valid"
+    },
+    {
+      "index": 8,
+      "voltageV": 3.9318,
+      "minimumV": 3.9318,
+      "maximumV": 3.9319,
+      "state": "valid"
+    },
+    {
+      "index": 9,
+      "voltageV": 3.9324,
+      "minimumV": 3.9324,
+      "maximumV": 3.9325,
+      "state": "valid"
+    },
+    {
+      "index": 10,
+      "voltageV": 3.9318,
+      "minimumV": 3.9316,
+      "maximumV": 3.9319,
+      "state": "valid"
+    },
+    {
+      "index": 11,
+      "voltageV": 3.9319,
+      "minimumV": 3.9318,
+      "maximumV": 3.9321,
+      "state": "valid"
+    },
+    {
+      "index": 12,
+      "voltageV": 3.9328,
+      "minimumV": 3.9327,
+      "maximumV": 3.933,
+      "state": "valid"
+    },
+    {
+      "index": 13,
+      "voltageV": 3.9334,
+      "minimumV": 3.9333,
+      "maximumV": 3.9334,
+      "state": "valid"
+    },
+    {
+      "index": 14,
+      "voltageV": 3.9334,
+      "minimumV": 3.9333,
+      "maximumV": 3.9334,
+      "state": "valid"
+    },
+    {
+      "index": 15,
+      "voltageV": 3.9333,
+      "minimumV": 3.9331,
+      "maximumV": 3.9334,
+      "state": "valid"
+    },
+    {
+      "index": 16,
+      "voltageV": 3.9325,
+      "minimumV": 3.9324,
+      "maximumV": 3.9327,
+      "state": "valid"
+    },
+    {
+      "index": 17,
+      "voltageV": 3.9327,
+      "minimumV": 3.9325,
+      "maximumV": 3.9328,
+      "state": "valid"
+    },
+    {
+      "index": 18,
+      "voltageV": 3.933,
+      "minimumV": 3.9328,
+      "maximumV": 3.933,
+      "state": "valid"
+    },
+    {
+      "index": 19,
+      "voltageV": 3.9334,
+      "minimumV": 3.9333,
+      "maximumV": 3.9334,
+      "state": "valid"
+    },
+    {
+      "index": 20,
+      "voltageV": 3.933,
+      "minimumV": 3.933,
+      "maximumV": 3.9331,
+      "state": "valid"
+    },
+    {
+      "index": 21,
+      "voltageV": 3.9328,
+      "minimumV": 3.9327,
+      "maximumV": 3.9328,
+      "state": "valid"
+    },
+    {
+      "index": 22,
+      "voltageV": 3.9336,
+      "minimumV": 3.9334,
+      "maximumV": 3.9336,
+      "state": "valid"
+    },
+    {
+      "index": 23,
+      "voltageV": 3.9327,
+      "minimumV": 3.9325,
+      "maximumV": 3.9327,
+      "state": "valid"
+    },
+    {
+      "index": 24,
+      "voltageV": 3.9345,
+      "minimumV": 3.9343,
+      "maximumV": 3.9346,
+      "state": "valid"
+    },
+    {
+      "index": 25,
+      "voltageV": 3.9345,
+      "minimumV": 3.9343,
+      "maximumV": 3.9346,
+      "state": "valid"
+    },
+    {
+      "index": 26,
+      "voltageV": 3.9345,
+      "minimumV": 3.9343,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 27,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 28,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 29,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 30,
+      "voltageV": 3.9345,
+      "minimumV": 3.9343,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 31,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 32,
+      "voltageV": 3.9342,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 33,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 34,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 35,
+      "voltageV": 3.934,
+      "minimumV": 3.934,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 36,
+      "voltageV": 3.9339,
+      "minimumV": 3.9337,
+      "maximumV": 3.9339,
+      "state": "valid"
+    },
+    {
+      "index": 37,
+      "voltageV": 3.934,
+      "minimumV": 3.9339,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 38,
+      "voltageV": 3.934,
+      "minimumV": 3.9339,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 39,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 40,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 41,
+      "voltageV": 3.9342,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 42,
+      "voltageV": 3.934,
+      "minimumV": 3.934,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 43,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 44,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 45,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 46,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 47,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 48,
+      "voltageV": 3.9337,
+      "minimumV": 3.9337,
+      "maximumV": 3.9339,
+      "state": "valid"
+    },
+    {
+      "index": 49,
+      "voltageV": 3.9342,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 50,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 51,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 52,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 53,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 54,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 55,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 56,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 57,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 58,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 59,
+      "voltageV": 3.9342,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 60,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 61,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 62,
+      "voltageV": 3.9342,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 63,
+      "voltageV": 3.9342,
+      "minimumV": 3.934,
+      "maximumV": 3.9342,
+      "state": "valid"
+    },
+    {
+      "index": 64,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 65,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 66,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 67,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 68,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9343,
+      "state": "valid"
+    },
+    {
+      "index": 69,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 70,
+      "voltageV": 3.9343,
+      "minimumV": 3.9343,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 71,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 72,
+      "voltageV": 3.9343,
+      "minimumV": 3.9343,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 73,
+      "voltageV": 3.9343,
+      "minimumV": 3.9342,
+      "maximumV": 3.9345,
+      "state": "valid"
+    },
+    {
+      "index": 74,
+      "voltageV": 3.9321,
+      "minimumV": 3.9321,
+      "maximumV": 3.9322,
+      "state": "valid"
+    },
+    {
+      "index": 75,
+      "voltageV": 3.9325,
+      "minimumV": 3.9324,
+      "maximumV": 3.9327,
+      "state": "valid"
+    },
+    {
+      "index": 76,
+      "voltageV": 3.9324,
+      "minimumV": 3.9322,
+      "maximumV": 3.9325,
+      "state": "valid"
+    },
+    {
+      "index": 77,
+      "voltageV": 3.9324,
+      "minimumV": 3.9322,
+      "maximumV": 3.9324,
+      "state": "valid"
+    },
+    {
+      "index": 78,
+      "voltageV": 3.9324,
+      "minimumV": 3.9322,
+      "maximumV": 3.9325,
+      "state": "valid"
+    },
+    {
+      "index": 79,
+      "voltageV": 3.9324,
+      "minimumV": 3.9322,
+      "maximumV": 3.9324,
+      "state": "valid"
+    },
+    {
+      "index": 80,
+      "voltageV": 3.9319,
+      "minimumV": 3.9318,
+      "maximumV": 3.9319,
+      "state": "valid"
+    },
+    {
+      "index": 81,
+      "voltageV": 3.9322,
+      "minimumV": 3.9321,
+      "maximumV": 3.9322,
+      "state": "valid"
+    },
+    {
+      "index": 82,
+      "voltageV": 3.9324,
+      "minimumV": 3.9324,
+      "maximumV": 3.9325,
+      "state": "valid"
+    },
+    {
+      "index": 83,
+      "voltageV": 3.9325,
+      "minimumV": 3.9325,
+      "maximumV": 3.9327,
+      "state": "valid"
+    },
+    {
+      "index": 84,
+      "voltageV": 3.9325,
+      "minimumV": 3.9324,
+      "maximumV": 3.9325,
+      "state": "valid"
+    },
+    {
+      "index": 85,
+      "voltageV": 3.9327,
+      "minimumV": 3.9325,
+      "maximumV": 3.9328,
+      "state": "valid"
+    },
+    {
+      "index": 86,
+      "voltageV": 3.9328,
+      "minimumV": 3.9328,
+      "maximumV": 3.933,
+      "state": "valid"
+    },
+    {
+      "index": 87,
+      "voltageV": 3.9324,
+      "minimumV": 3.9324,
+      "maximumV": 3.9325,
+      "state": "valid"
+    },
+    {
+      "index": 88,
+      "voltageV": 3.9327,
+      "minimumV": 3.9327,
+      "maximumV": 3.9328,
+      "state": "valid"
+    },
+    {
+      "index": 89,
+      "voltageV": 3.933,
+      "minimumV": 3.933,
+      "maximumV": 3.9331,
+      "state": "valid"
+    },
+    {
+      "index": 90,
+      "voltageV": 3.9325,
+      "minimumV": 3.9324,
+      "maximumV": 3.9327,
+      "state": "valid"
+    },
+    {
+      "index": 91,
+      "voltageV": 3.9327,
+      "minimumV": 3.9327,
+      "maximumV": 3.9328,
+      "state": "valid"
+    },
+    {
+      "index": 92,
+      "voltageV": 3.9327,
+      "minimumV": 3.9327,
+      "maximumV": 3.9328,
+      "state": "valid"
+    },
+    {
+      "index": 93,
+      "voltageV": 3.933,
+      "minimumV": 3.9328,
+      "maximumV": 3.9331,
+      "state": "valid"
+    },
+    {
+      "index": 94,
+      "voltageV": 3.9324,
+      "minimumV": 3.9322,
+      "maximumV": 3.9325,
+      "state": "valid"
+    },
+    {
+      "index": 95,
+      "voltageV": 3.9327,
+      "minimumV": 3.9325,
+      "maximumV": 3.9328,
+      "state": "valid"
+    },
+    {
+      "index": 96,
+      "voltageV": 3.9327,
+      "minimumV": 3.9325,
+      "maximumV": 3.9328,
+      "state": "valid"
+    }
+  ],
+  "scenarios": [
+    {
+      "atSeconds": 0,
+      "state": "connected"
+    },
+    {
+      "atSeconds": 10,
+      "signal": "fullPackEnergyKwh",
+      "state": "unavailable"
+    },
+    {
+      "atSeconds": 15,
+      "state": "stale"
+    },
+    {
+      "atSeconds": 20,
+      "state": "disconnected"
+    },
+    {
+      "atSeconds": 25,
+      "state": "connected"
+    }
+  ],
+  "performanceDemo": {
+    "mode": "simulated",
+    "rollout": "none",
+    "zeroTo60MphSeconds": 4.9,
+    "quarterMileSeconds": 13.2,
+    "peakBatteryPowerKw": 280,
+    "note": "Fictional UI examples, not measured vehicle results"
+  },
+  "controlDemo": {
+    "mode": "simulated",
+    "actions": [
+      "glovebox",
+      "fold mirrors",
+      "charge port"
+    ],
+    "outcomes": [
+      "pending",
+      "confirmed",
+      "unconfirmed"
+    ],
+    "realCommandsAllowed": false
+  }
+}
