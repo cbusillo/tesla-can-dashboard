@@ -10,7 +10,11 @@ export type Reading = {
 export type Session = { id: string; sizeBytes: number; modifiedAt: number };
 export type Snapshot = {
   mode: string;
-  connection: { state: string; error?: string };
+  connection: {
+    state: string;
+    ageSeconds?: number | null;
+    error?: string | null;
+  };
   signals: Record<string, Reading>;
   cellGroups: (Reading & { index: number })[];
   cellSpreadMv: number | null;
@@ -122,7 +126,14 @@ export function holdSnapshot(snapshot: Snapshot, elapsed: number): Snapshot {
   });
   return {
     ...snapshot,
-    connection: { ...snapshot.connection, state: "disconnected" },
+    connection: {
+      ...snapshot.connection,
+      state: "disconnected",
+      ageSeconds:
+        snapshot.connection.ageSeconds == null
+          ? null
+          : snapshot.connection.ageSeconds + elapsed,
+    },
     signals: Object.fromEntries(
       Object.entries(snapshot.signals).map(([key, value]) => [
         key,
@@ -133,4 +144,42 @@ export function holdSnapshot(snapshot: Snapshot, elapsed: number): Snapshot {
     freshCellCount: 0,
     cellSpreadMv: null,
   };
+}
+
+export function elapsed(seconds: number): string {
+  const age = Math.max(0, Math.floor(seconds));
+  if (age < 60) return `${age} s`;
+  if (age < 3600) return `${Math.floor(age / 60)} min`;
+  if (age < 86400) return `${Math.floor(age / 3600)} h`;
+  return `${Math.floor(age / 86400)} d`;
+}
+export function readingStatus(reading: Reading | undefined): string {
+  if (reading?.quality === "invalid") return "Invalid";
+  if (reading?.quality === "stale")
+    return reading.ageSeconds === null
+      ? "Stale"
+      : `${elapsed(reading.ageSeconds)} old`;
+  return "";
+}
+export function sourceStatus(
+  snapshot: Snapshot | null,
+  offline: boolean,
+): string {
+  const age = snapshot?.connection.ageSeconds;
+  const lastUpdate = age == null ? "" : `Last update ${elapsed(age)} ago`;
+  if (offline) {
+    if (snapshot?.replay?.source === "demonstration")
+      return "Demo · Pi offline";
+    if (snapshot?.mode === "replay") return "Replay · Pi offline";
+    return lastUpdate
+      ? `Pi offline · ${lastUpdate.toLowerCase()}`
+      : "Pi offline";
+  }
+  if (!snapshot) return "Connecting…";
+  if (snapshot.replay?.source === "demonstration") return "Demo";
+  if (snapshot.mode === "replay")
+    return `Replay · ${snapshot.replay?.state || "playing"}`;
+  if (snapshot.connection.error) return "CAN unavailable";
+  if (snapshot.connection.state === "connected") return "Live";
+  return lastUpdate || "Waiting for CAN";
 }

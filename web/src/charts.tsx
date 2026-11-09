@@ -158,7 +158,9 @@ export function Dial({
           valueAnimation: false,
           offsetCenter: [0, "62%"],
           fontSize: 25,
-          color: color("chart-text"),
+          color: color(
+            reading.quality === "fresh" ? "chart-text" : "chart-muted",
+          ),
           fontFamily: getComputedStyle(document.documentElement).fontFamily,
           formatter: () => value.toFixed(reading.unit === "V" ? 2 : 1),
         },
