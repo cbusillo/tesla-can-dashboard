@@ -49,7 +49,7 @@ def read_frames(path: Path) -> Iterator[Frame]:
                 raise ValueError("Recording contains an invalid CAN payload")
             if not isinstance(timestamp, (int, float)):
                 raise ValueError("Recording contains an invalid timestamp")
-            source_time = cast(float | int, timestamp)
+            source_time: float | int = timestamp
             if isinstance(timestamp, bool) or not math.isfinite(source_time):
                 raise ValueError("Recording contains an invalid timestamp")
             if not isinstance(monotonic, int):
