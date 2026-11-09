@@ -1,0 +1,37 @@
+[project]
+name = "tesla-can-dashboard"
+version = "0.1.0"
+description = "A receive-only CAN dashboard with local recording and replay"
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "cantools>=39"]
+
+[project.scripts]
+tesla-can-dashboard = "tesla_can_dashboard.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "httpx>=0.27",
+    "ruff>=0.9",
+    "httpx2>=2.16.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tesla_can_dashboard"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"design/fixture.json" = "tesla_can_dashboard/data/demo.json"
+
+[tool.ruff]
+line-length = 133
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "G", "BLE", "S608"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
