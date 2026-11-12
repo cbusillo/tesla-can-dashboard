@@ -135,6 +135,7 @@ def test_curves_runs_and_input_frames_are_bounded(tmp_path: Path, telemetry_dbc:
     result = analyze(tmp_path, telemetry_dbc, frames)
     assert len(measurement(result, "0-100-kmh")["runs"]) == 2
     assert result["performance"]["omittedRuns"] > 0
+    assert result["quality"] == "partial"
     monkeypatch.setattr("tesla_can_dashboard.analysis.MAX_ANALYSIS_FRAMES", 5)
     with pytest.raises(analysis.AnalysisLimitError):
         analyze(tmp_path, telemetry_dbc, frames)

@@ -262,6 +262,8 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
     if not frame_count:
         reasons.add("empty_recording")
     reasons.update(performance.reasons)
+    if performance.omitted_runs:
+        reasons.add("run_limit")
     if not performance.speed_samples:
         reasons.add("missing_speed")
     duration = (previous_ns - first_ns) / 1e9 if previous_ns is not None and first_ns is not None and not invalid else None
