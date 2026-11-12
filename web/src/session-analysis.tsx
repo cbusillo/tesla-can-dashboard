@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Chart } from "./charts";
-import type { Session } from "./types";
+import { convert, displayUnit, type Session } from "./types";
 import "./session-analysis.css";
 
 type Run = {
@@ -37,7 +37,11 @@ export type Analysis = {
   sessionId: string;
   quality: string;
   reasons: string[];
-  recording: { frames: number; durationSeconds: number | null; decodeErrors: number };
+  recording: {
+    frames: number;
+    durationSeconds: number | null;
+    decodeErrors: number;
+  };
   timing: { maximumSpeedGapSeconds: number; precision: string };
   performance: {
     groups: { convention: string; measurements: Measurement[] }[];
@@ -46,7 +50,12 @@ export type Analysis = {
   battery: {
     quality: string;
     signals: Record<string, Observation>;
-    charging: { quality: string; observedEnergyKwh: number | null; coveredSeconds: number; boundary: string };
+    charging: {
+      quality: string;
+      observedEnergyKwh: number | null;
+      coveredSeconds: number;
+      boundary: string;
+    };
   };
 };
 const labels: Record<string, string> = {
@@ -55,10 +64,10 @@ const labels: Record<string, string> = {
   "30-70-mph": "30–70 mph",
   "80-120-kmh": "80–120 km/h",
   "quarter-mile": "Quarter mile",
-
 };
 const reasons: Record<string, string> = {
-  interrupted_tail: "Interrupted final frame excluded; complete earlier samples retained",
+  interrupted_tail:
+    "Interrupted final frame excluded; complete earlier samples retained",
   non_forward_gear: "Park or Neutral interrupted measurement",
   missing_speed: "No supported speed samples",
   unknown_direction: "Forward gear missing, stale or unqualified",
@@ -67,48 +76,100 @@ const reasons: Record<string, string> = {
   speed_gap: "Speed samples too far apart",
   non_monotonic_speed: "Speed acquisition times repeated or ran backwards",
   incomplete_interval: "No complete interval with sufficient data",
-  invalid_recording: "Recording incomplete, corrupt or acquisition times ran backwards",
+  invalid_recording:
+    "Recording incomplete, corrupt or acquisition times ran backwards",
   empty_recording: "Recording has no frames",
   decode_errors: "Some frames could not be decoded",
   run_limit: "Run display limit reached; no best selected",
 };
 function explain(items: string[]) {
-  return items.map((item) => reasons[item] || item.replaceAll("_", " ")).join(". ");
+  return items
+    .map((item) => reasons[item] || item.replaceAll("_", " "))
+    .join(". ");
 }
-function observed(value: number | null, unit: string) {
+function observed(value: number | null, unit: string, units = "metric") {
   if (value === null) return "Unavailable";
   if (unit === "kWh" && value > 0 && value < 0.001) return "<0.001 kWh";
-  return `${value.toFixed(unit === "kWh" ? 3 : 1)} ${unit}`;
+  return `${convert(value, unit, units).toFixed(unit === "kWh" ? 3 : 1)} ${displayUnit(unit, units)}`;
 }
 function MeasurementCard({ measurement }: { measurement: Measurement }) {
   return (
     <article className="session-measurement">
       <h4>{labels[measurement.id] || measurement.id}</h4>
-      {measurement.runs.length === 0 ? <p>Unavailable</p> : (
+      {measurement.runs.length === 0 ? (
+        <p>Unavailable</p>
+      ) : (
         <ol>
           {measurement.runs.map((run, index) => (
             <li key={`${run.startSeconds}-${index}`}>
               <strong>{run.durationSeconds.toFixed(1)} s</strong>
-              <span>From {run.startSeconds.toFixed(1)} s · samples up to {run.sampleResolutionSeconds.toFixed(2)} s apart</span>
+              <span>
+                From {run.startSeconds.toFixed(1)} s · samples up to{" "}
+                {run.sampleResolutionSeconds.toFixed(2)} s apart
+              </span>
             </li>
           ))}
         </ol>
       )}
-      {measurement.reasons.length > 0 && <small>{explain(measurement.reasons)}</small>}
+      {measurement.reasons.length > 0 && (
+        <small>{explain(measurement.reasons)}</small>
+      )}
     </article>
   );
 }
-function ObservationCurve({ signal, label }: { signal: Observation; label: string }) {
-  return <Chart label={`${label} sampled observations by acquisition seconds`} height={160} option={{
-    grid: { left: 50, right: 16, top: 20, bottom: 35 },
-    tooltip: { trigger: "item", renderMode: "richText", confine: true },
-    xAxis: { type: "value", name: "s", axisLabel: { color: "#888" } },
-    yAxis: { type: "value", scale: true, name: signal.unit, axisLabel: { color: "#888" } },
-    series: [{ type: "line", data: signal.curve, showSymbol: true, symbolSize: 4,
-      connectNulls: false, lineStyle: { opacity: 0 }, itemStyle: { color: "#4c9ecf" } }],
-  }} />;
+function ObservationCurve({
+  signal,
+  label,
+  units,
+}: {
+  signal: Observation;
+  label: string;
+  units: string;
+}) {
+  const style = getComputedStyle(document.documentElement);
+  const muted = style.getPropertyValue("--muted").trim() || style.color;
+  const accent = style.getPropertyValue("--accent").trim() || style.color;
+  return (
+    <Chart
+      label={`${label} sampled observations by acquisition seconds`}
+      height={160}
+      option={{
+        grid: { left: 50, right: 16, top: 20, bottom: 35 },
+        tooltip: { trigger: "item", renderMode: "richText", confine: true },
+        xAxis: { type: "value", name: "s", axisLabel: { color: muted } },
+        yAxis: {
+          type: "value",
+          scale: true,
+          name: displayUnit(signal.unit, units),
+          axisLabel: { color: muted },
+        },
+        series: [
+          {
+            type: "line",
+            data: signal.curve.map(([seconds, value]) => [
+              seconds,
+              value === null ? null : convert(value, signal.unit, units),
+            ]),
+            showSymbol: true,
+            symbolSize: 4,
+            connectNulls: false,
+            lineStyle: { opacity: 0 },
+            itemStyle: { color: accent },
+          },
+        ],
+      }}
+    />
+  );
 }
-export function SessionAnalysis({ sessions, activeId }: { sessions: Session[]; activeId: string | null }) {
+export function SessionAnalysis({
+  sessions,
+  activeId,
+  units = "metric",
+}: {
+  sessions: Session[];
+  activeId: string | null;
+  units?: string;
+}) {
   const [selected, setSelected] = useState("");
   const [result, setResult] = useState<Analysis | null>(null);
   const [error, setError] = useState("");
@@ -122,7 +183,10 @@ export function SessionAnalysis({ sessions, activeId }: { sessions: Session[]; a
     setResult(null);
     setError("");
     setBusy(false);
-    return () => { controller.current?.abort(); controller.current = null; };
+    return () => {
+      controller.current?.abort();
+      controller.current = null;
+    };
   }, [selected, exists]);
   async function analyze() {
     controller.current?.abort();
@@ -133,13 +197,25 @@ export function SessionAnalysis({ sessions, activeId }: { sessions: Session[]; a
     setResult(null);
     const timeout = window.setTimeout(() => request.abort(), 30000);
     try {
-      const response = await fetch(`/api/recordings/${encodeURIComponent(selected)}/analysis`, { signal: request.signal });
-      const data = await response.json().catch(() => ({ detail: "Session analysis is unavailable. Try again." }));
-      if (!response.ok) throw new Error(data.detail || "Session analysis failed");
+      const response = await fetch(
+        `/api/recordings/${encodeURIComponent(selected)}/analysis`,
+        { signal: request.signal },
+      );
+      const data = await response
+        .json()
+        .catch(() => ({
+          detail: "Session analysis is unavailable. Try again.",
+        }));
+      if (!response.ok)
+        throw new Error(data.detail || "Session analysis failed");
       if (!request.signal.aborted) setResult(data as Analysis);
     } catch (failure) {
       if (controller.current === request) {
-        setError(request.signal.aborted ? "Analysis took too long. Wait for it to finish before trying again." : String(failure));
+        setError(
+          request.signal.aborted
+            ? "Analysis took too long. Wait for it to finish before trying again."
+            : String(failure),
+        );
       }
     } finally {
       window.clearTimeout(timeout);
@@ -147,40 +223,128 @@ export function SessionAnalysis({ sessions, activeId }: { sessions: Session[]; a
     }
   }
   return (
-    <section className="session-analysis" aria-label="Recorded session analysis">
-      <header><h2>Session analysis</h2><p>Measurements from saved CAN frames and their acquisition times.</p></header>
+    <section
+      className="session-analysis"
+      aria-label="Recorded session analysis"
+    >
+      <header>
+        <h2>Session analysis</h2>
+      </header>
       <div className="session-picker">
-        <label>Completed recording
-          <select value={exists ? selected : ""} onChange={(event) => setSelected(event.currentTarget.value)}>
+        <label>
+          Completed recording
+          <select
+            value={exists ? selected : ""}
+            onChange={(event) => setSelected(event.currentTarget.value)}
+          >
             <option value="">Choose a recording</option>
             {available.map((session) => (
-              <option key={session.id} value={session.id}>{new Date(session.modifiedAt * 1000).toLocaleString()} · {(session.sizeBytes / 1024).toFixed(0)} KB</option>
+              <option key={session.id} value={session.id}>
+                {new Date(session.modifiedAt * 1000).toLocaleString()} ·{" "}
+                {(session.sizeBytes / 1024).toFixed(0)} KB
+              </option>
             ))}
           </select>
         </label>
-        <button type="button" disabled={!exists || busy} onClick={() => void analyze()}>{busy ? "Analyzing…" : "Analyze"}</button>
+        <button
+          type="button"
+          disabled={!exists || busy}
+          onClick={() => void analyze()}
+        >
+          {busy ? "Analyzing…" : "Analyze"}
+        </button>
       </div>
-      {available.length === 0 && <p>Stop and save a recording to analyze it.</p>}
+      {available.length === 0 && (
+        <p>Stop and save a recording to analyze it.</p>
+      )}
       {error && <p role="alert">{error}</p>}
-      {result && <div aria-live="polite">
-        <p>{result.recording.frames.toLocaleString()} frames · {observed(result.recording.durationSeconds, "s")} · {result.quality}</p>
-        {result.reasons.length > 0 && <p>{explain(result.reasons)}</p>}
-        {result.quality !== "invalid" && <>
-          <p>Estimates with no rollout. Standing timing starts at the last observed zero. Speed samples must be at most {result.timing.maximumSpeedGapSeconds} s apart. Sensor accuracy is not established by this analysis.</p>
-          {result.performance.groups.map((group) => <section key={group.convention}>
-            <h3>{group.convention.startsWith("standing") ? "Standing · no rollout" : "Rolling · threshold crossings"}</h3>
-            <div className="session-measurements">{group.measurements.map((measurement) => <MeasurementCard key={measurement.id} measurement={measurement} />)}</div>
-          </section>)}
-          <h3>Battery and charging observations</h3><p>Curves show sampled observations on an elapsed-seconds axis. Points are not joined across unobserved time.</p>
-          <p>{observed(result.battery.charging.observedEnergyKwh, "kWh")} across {result.battery.charging.coveredSeconds.toFixed(1)} s of covered charger-line samples ({result.battery.charging.quality}). This is not pack energy or DC fast-charge energy.</p>
-          <dl className="session-observations">{Object.entries(result.battery.signals).map(([key, signal]) => <div key={key}>
-            <dt>{signal.label}</dt>
-            <dd>{signal.samples ? <>{observed(signal.first, signal.unit)} → {observed(signal.last, signal.unit)}<small>Observed {observed(signal.minimum, signal.unit)} to {observed(signal.maximum, signal.unit)} · {signal.samples} samples · {signal.quality}</small></> : "Unavailable"}</dd>
-            {signal.samples > 0 && <ObservationCurve signal={signal} label={signal.label} />}
-          </div>)}</dl>
-          <p>Decoded with the current profile. The recording does not identify its original profile. Current sign is unqualified; these observations do not establish battery health, age, range or charging ETA.</p>
-        </>}
-      </div>}
+      {result && (
+        <div aria-live="polite">
+          <p>
+            {result.recording.frames.toLocaleString()} frames ·{" "}
+            {observed(result.recording.durationSeconds, "s")} · {result.quality}
+          </p>
+          {result.reasons.length > 0 && <p>{explain(result.reasons)}</p>}
+          {result.quality !== "invalid" && (
+            <>
+              <details className="session-conventions">
+                <summary>Timing and data quality</summary>
+                <p>
+                  Estimates with no rollout. Standing timing starts at the last
+                  observed zero. Speed samples must be at most{" "}
+                  {result.timing.maximumSpeedGapSeconds} s apart. Durations use
+                  userspace acquisition timestamps. Sensor accuracy is not
+                  established by this analysis.
+                </p>
+              </details>
+              {result.performance.groups.map((group) => (
+                <section key={group.convention}>
+                  <h3>
+                    {group.convention.startsWith("standing")
+                      ? "Standing · no rollout"
+                      : "Rolling · threshold crossings"}
+                  </h3>
+                  <div className="session-measurements">
+                    {group.measurements.map((measurement) => (
+                      <MeasurementCard
+                        key={measurement.id}
+                        measurement={measurement}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+              <h3>Battery and charging observations</h3>
+              <p>
+                Curves show sampled observations on an elapsed-seconds axis.
+                Points are not joined across unobserved time.
+              </p>
+              <p>
+                {observed(result.battery.charging.observedEnergyKwh, "kWh")}{" "}
+                across {result.battery.charging.coveredSeconds.toFixed(1)} s of
+                covered charger-line samples ({result.battery.charging.quality}
+                ). This is not pack energy or DC fast-charge energy.
+              </p>
+              <dl className="session-observations">
+                {Object.entries(result.battery.signals).map(([key, signal]) => (
+                  <div key={key}>
+                    <dt>{signal.label}</dt>
+                    <dd>
+                      {signal.samples ? (
+                        <>
+                          {observed(signal.first, signal.unit, units)} →{" "}
+                          {observed(signal.last, signal.unit, units)}
+                          <small>
+                            Observed{" "}
+                            {observed(signal.minimum, signal.unit, units)} to{" "}
+                            {observed(signal.maximum, signal.unit, units)} ·{" "}
+                            {signal.samples} samples · {signal.quality}
+                          </small>
+                        </>
+                      ) : (
+                        "Unavailable"
+                      )}
+                    </dd>
+                    {signal.samples > 0 && (
+                      <ObservationCurve
+                        signal={signal}
+                        label={signal.label}
+                        units={units}
+                      />
+                    )}
+                  </div>
+                ))}
+              </dl>
+              <p>
+                Decoded with the current profile. The recording does not
+                identify its original profile. Current sign is unqualified;
+                these observations do not establish battery health, age, range
+                or charging ETA.
+              </p>
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }

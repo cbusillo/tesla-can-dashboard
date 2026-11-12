@@ -61,8 +61,9 @@ without opening the browser. Existing recordings and storage limits are kept;
 a capture-start failure leaves the receiver/server running. The existing
 recorder rolls into completed chunks within the analysis limits and reports
 a full total budget without erasing older files.
-The standalone session-analysis component awaits integration into the selected
-interface. New DBC mappings still need target qualification. Convenience
+Sessions includes recording analysis with explicit measurement conventions,
+data-quality reasons and sampled battery curves. Operator profile identity,
+charging semantics and precision still require runtime qualification. Convenience
 controls are not implemented. No vehicle command endpoint exists.
 
 The dashboard does not provide portable internet or a hotspot setup. Browser

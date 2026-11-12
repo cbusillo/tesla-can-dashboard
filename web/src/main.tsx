@@ -43,7 +43,8 @@ import {
   type Layout,
   type Snapshot,
 } from "./types";
-import { Metric, Page, Performance } from "./dashboard";
+import { Metric, Page } from "./dashboard";
+import { SessionAnalysis } from "./session-analysis";
 import "./style.css";
 initialize({ mode: "ios", animated: false });
 addIcons({
@@ -807,6 +808,11 @@ function App() {
           {!data?.recording.sessions.length && (
             <p class="ion-padding">No recordings</p>
           )}
+          <SessionAnalysis
+            sessions={data?.recording.sessions || []}
+            activeId={data?.recording.activeId || null}
+            units={layout.units}
+          />
         </Page>
         <Page name="settings" title="Settings" {...common}>
           <main class="settings-page">
@@ -847,7 +853,6 @@ function App() {
                 <ion-label>Choose instruments</ion-label>
               </ion-item>
             </ion-list>
-            <Performance />
           </main>
         </Page>
         <ion-tab-bar slot="bottom">

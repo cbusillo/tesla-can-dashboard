@@ -118,6 +118,6 @@ must check quality before displaying measurements.
 
 `web/src/session-analysis.tsx` exports `SessionAnalysis({ sessions, activeId })`.
 It loads on an explicit Analyze action, cancels obsolete requests, hides
-invalid results, and displays unavailable data and sample resolution. The main
-UI integration is owned separately; this component does not edit `main.tsx`.
-Physical profile/source qualification and installation are Supervisor work.
+invalid results, and displays unavailable data and sample resolution. It is integrated below saved sessions in the selected interface, using its
+day/night appearance and unit preference. Profile/source qualification and
+installation remain Supervisor work.
