@@ -2,8 +2,8 @@
 
 A lightweight, receive-only dashboard for a Pi connected to Tesla CAN.
 Designed for the in-car browser, including Intel Atom cars. This is an early
-development preview using Ionic’s standard iOS components and a small set of
-telemetry charts.
+development preview using Preact, Ionic iOS components and local telemetry
+charts, with open instruments and restrained day/night colors.
 
 The first implementation includes selectable dials, numeric readings and
 recent history, editable dial ranges, 96 configurable cell groups with a
@@ -13,6 +13,14 @@ from zero. The service reconnects when the interface returns. The browser
 reconnects automatically, marks held readings when the connection drops, and
 supports remote page reload at `/control` while
 the page is still open.
+
+Overview shows the first two selected instruments as open dials and the rest
+as readings, with selectable recent history. Cells provides chart selection,
+a group map and large previous/next controls. Charging shows available pack
+readings and current history. Sessions and Settings remain in the bottom
+navigation. Existing saved instruments, ranges, units and appearance are
+preserved. Charging power and charge limit remain unavailable until decoded;
+the app does not estimate range, charging ETA or current direction.
 
 ## Try the demonstration
 
@@ -64,7 +72,8 @@ hands-on vehicle testing. Do not interact with the dashboard while driving.
 ## Develop
 
 `uv run pytest`, `uv run ruff check .`, and `uv run ruff format --check .`
-check the backend. `npm run --prefix web build` checks TypeScript and builds
+check the backend. `npm test --prefix web` checks reading quality and unit
+conversion. `npm run --prefix web build` checks TypeScript and builds
 local frontend assets. For frontend development, start the API, then run
 `npm run --prefix web dev`; Vite proxies `/api` to the local API.
 
