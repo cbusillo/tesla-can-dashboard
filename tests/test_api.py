@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from tesla_can_dashboard.analysis import analyze_recording
 from tesla_can_dashboard.api import create_app
 from tesla_can_dashboard.decoder import Decoder
 from tesla_can_dashboard.engine import Engine
@@ -167,7 +168,7 @@ def test_analysis_rejects_oversized_input_and_does_not_return_changed_recording(
         monkeypatch.undo()
 
         def mutate_during_analysis(path: Path, decoder: Decoder) -> dict:
-            result = analysis.analyze_recording(path, decoder)
+            result = analyze_recording(path, decoder)
             with path.open("ab") as stream:
                 stream.write(Frame(0x132, bytes(8), 0, 2).encode())
             return result

@@ -77,7 +77,7 @@ An invalid recording's observations must not be presented as a valid summary.
 CAN-sign current remains unqualified. No regen, age, health percentage,
 range or charging ETA is inferred.
 
-## Startup recording and supplemental speed profile
+## Startup recording
 
 `--record-on-start` explicitly opts a live receiver into recording at server
 startup, without a browser visit. It requires `--interface`; demonstrations
@@ -87,15 +87,19 @@ record replay as live, and stops at the storage limit without a retry loop.
 A startup storage failure appears in recording status while the receiver and
 server continue. Each successful service start creates a new recording;
 this is not automatic per-drive segmentation or an indefinite recording promise.
-Stop recording before analyzing the active session.
+The same Recorder rolls over before either analysis input limit is exceeded:
+64 MiB or 500,000 frames per JSONL chunk. The boundary frame goes into the new
+chunk exactly once. Older chunks remain immutable and analyzable during
+continued capture. All chunks share the existing total budget and free-space
+reserve. Reaching either safeguard stops capture and reports the error;
+there is no deletion, overwrite or automatic restart loop. Runs do not bridge
+chunk boundaries. Stop recording before analyzing the active chunk.
 
-When a primary DBC omits `DI_vehicleSpeed`, `--speed-dbc /path/to/speed.dbc`
-may supply it separately alongside `--dbc /path/to/primary.dbc`. Only its one
-speed message is selected and only its speed signal is exposed. Other battery
-or control definitions in that file are ignored. An ambiguous speed definition,
-a duplicate primary speed definition, or a conflicting message identifier is
-rejected. No supplemental bit decoder is built in and no third-party profile
-is bundled. The private operator file must remain outside source control.
+The application reads one operator DBC through the existing `--dbc` option.
+If it lacks a required definition, a qualified composite profile is prepared
+privately and conflicts are checked there. App source does not contain a
+supplement mechanism or profile composition tool. Operator profiles,
+composition provenance and real captures stay outside source control.
 Exact-zero standing starts intentionally remain unavailable if a source reports
 a nonzero value at rest; analysis never invents a calibration offset.
 

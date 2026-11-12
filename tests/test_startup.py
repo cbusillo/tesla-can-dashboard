@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import uvicorn
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -27,7 +28,7 @@ def test_auto_capture_storage_failure_keeps_cli_server_and_live_receiver(tmp_pat
             served.append((host, port))
 
     monkeypatch.setattr(Recorder, "start", unavailable)
-    monkeypatch.setattr(cli.uvicorn, "run", serve)
+    monkeypatch.setattr(uvicorn, "run", serve)
     cli.main()
     assert served
 

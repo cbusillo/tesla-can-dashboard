@@ -12,7 +12,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Receive-only Tesla CAN dashboard")
     parser.add_argument("--interface", help="SocketCAN interface; omitted starts the replay demonstration")
     parser.add_argument("--dbc", type=Path, help="Operator-supplied compatible DBC; not bundled")
-    parser.add_argument("--speed-dbc", type=Path, help="Optional speed-only supplement; keeps primary battery messages")
     parser.add_argument(
         "--record-on-start", action="store_true", help="Start bounded recording at live startup; requires --interface"
     )
@@ -29,10 +28,8 @@ def main() -> None:
         parser.error("Choose a valid cell count and positive recording storage limit")
     if args.record_on_start and not args.interface:
         parser.error("--record-on-start requires a live --interface")
-    if args.speed_dbc and not args.dbc:
-        parser.error("--speed-dbc requires a primary --dbc")
     recorder = Recorder(args.data_dir / "recordings", args.recording_limit_mib * 1024 * 1024)
-    engine = Engine(args.interface, recorder, args.dbc, args.cells, speed_dbc=args.speed_dbc, auto_record=args.record_on_start)
+    engine = Engine(args.interface, recorder, args.dbc, args.cells, auto_record=args.record_on_start)
     app = create_app(engine, args.data_dir, args.assets, set(args.allowed_origin) or None, args.designs)
     uvicorn.run(app, host=args.bind, port=args.port)
 

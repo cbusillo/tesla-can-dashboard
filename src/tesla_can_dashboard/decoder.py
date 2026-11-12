@@ -4,7 +4,7 @@ import struct
 from pathlib import Path
 
 import cantools
-from cantools.database.can import Signal
+from cantools.database.can import Message, Signal
 
 SIGNAL_NAMES = {
     "BMS_dcLinkVoltage": "voltageV",
@@ -38,32 +38,13 @@ INVALID_CHOICES = {"SNA", "INVALID", "NOT_AVAILABLE"}
 
 
 class Decoder:
-    def __init__(self, dbc: Path | None = None, speed_dbc: Path | None = None) -> None:
+    def __init__(self, dbc: Path | None = None) -> None:
         database = None
-        self.speed_frame_id: int | None = None
         if dbc is not None:
             database = cantools.database.can.Database(strict=False)
             database.add_dbc_file(dbc)
-        if speed_dbc is not None:
-            if database is None:
-                raise ValueError("A speed supplement requires a primary operator DBC")
-            if any(signal.name == "DI_vehicleSpeed" for message in database.messages for signal in message.signals):
-                raise ValueError("Primary DBC already defines speed; omit the speed supplement")
-            supplement = cantools.database.can.Database(strict=False)
-            supplement.add_dbc_file(speed_dbc)
-            speed_messages = [
-                message for message in supplement.messages if any(signal.name == "DI_vehicleSpeed" for signal in message.signals)
-            ]
-            if len(speed_messages) != 1:
-                raise ValueError("Speed supplement must define exactly one speed message")
-            if speed_messages[0].frame_id in {message.frame_id for message in database.messages}:
-                raise ValueError("Speed supplement conflicts with a primary message identifier")
-            self.speed_frame_id = speed_messages[0].frame_id
-            database.messages.extend(speed_messages)
-            database.refresh()
-        self.speed_supplement = speed_dbc is not None
         self.database = database
-        self.messages = (
+        self.messages: dict[int, Message] = (
             {}
             if self.database is None
             else {
@@ -83,9 +64,7 @@ class Decoder:
         return {
             SIGNAL_NAMES[signal.name]
             for signal in message.signals
-            if signal.name in SIGNAL_NAMES
-            and signal.unit in UNIT_FACTORS[SIGNAL_NAMES[signal.name]]
-            and (identifier != self.speed_frame_id or signal.name == "DI_vehicleSpeed")
+            if signal.name in SIGNAL_NAMES and signal.unit in UNIT_FACTORS[SIGNAL_NAMES[signal.name]]
         }
 
     def decode(self, identifier: int, data: bytes) -> tuple[dict[str, float | None], dict[int, float | None]]:
@@ -100,8 +79,6 @@ class Decoder:
         values = {}
         cells = {}
         for signal in message.signals:
-            if identifier == self.speed_frame_id and signal.name != "DI_vehicleSpeed":
-                continue
             if signal.name not in decoded:
                 continue
             value = decoded[signal.name]
@@ -111,7 +88,7 @@ class Decoder:
                 if factor is None:
                     continue
                 if key == "driveGear":
-                    raw = signal.conversion.scaled_to_raw(value)
+                    raw = int(signal.conversion.scaled_to_raw(value))
                     choice = str((signal.choices or {}).get(raw, ""))
                     values[key] = GEARS.get(choice)
                     continue
@@ -135,10 +112,11 @@ class Decoder:
         if signal.minimum is not None and signal.maximum is not None and signal.minimum < signal.maximum:
             if not signal.minimum <= value <= signal.maximum:
                 return False
-        if not signal.choices:
+        choices = signal.choices
+        if not choices:
             return True
-        raw = signal.conversion.scaled_to_raw(value)
-        choice = str(signal.choices.get(raw, "")).upper()
+        raw = int(signal.conversion.scaled_to_raw(value))
+        choice = str(choices.get(raw, "")).upper()
         return choice not in INVALID_CHOICES and not choice.endswith(("_SNA", "_INVALID"))
 
     @staticmethod

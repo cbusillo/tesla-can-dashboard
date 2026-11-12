@@ -25,11 +25,10 @@ class Engine:
         dbc: Path | None = None,
         cell_count: int = 96,
         *,
-        speed_dbc: Path | None = None,
         auto_record: bool = False,
     ) -> None:
         self.interface = interface
-        self.decoder = Decoder(dbc, speed_dbc)
+        self.decoder = Decoder(dbc)
         self.auto_record = auto_record
         self.recorder = recorder
         self.store = SignalStore(cell_count)

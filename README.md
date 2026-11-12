@@ -50,8 +50,9 @@ rolling intervals, quarter-mile timing and battery/charger-line observations.
 See [analysis conventions and signal coverage](docs/session-analysis.md).
 Use `--record-on-start` with a live `--interface` to capture at server startup
 without opening the browser. Existing recordings and storage limits are kept;
-a capture-start failure leaves the receiver/server running. An optional
-`--speed-dbc` supplies only speed when the primary operator DBC omits it.
+a capture-start failure leaves the receiver/server running. The existing
+recorder rolls into completed chunks within the analysis limits and reports
+a full total budget without erasing older files.
 The standalone session-analysis component awaits integration into the selected
 interface. New DBC mappings still need target qualification. Convenience
 controls are not implemented. No vehicle command endpoint exists.

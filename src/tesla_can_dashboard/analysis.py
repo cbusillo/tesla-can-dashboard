@@ -5,11 +5,9 @@ from pathlib import Path
 import cantools
 
 from .decoder import Decoder
-from .recording import InterruptedTailError, read_frames
+from .recording import MAX_ANALYSIS_BYTES, MAX_ANALYSIS_FRAMES, InterruptedTailError, read_frames
 from .signals import CATALOG, is_valid_signal
 
-MAX_ANALYSIS_BYTES = 64 * 1024 * 1024
-MAX_ANALYSIS_FRAMES = 500_000
 MAX_RUNS = 50
 MAX_CURVE_POINTS = 240
 MAX_SPEED_GAP = 0.5
@@ -294,7 +292,6 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
         "decoder": {
             "profile": "current-operator-dbc" if decoder.database else "built-in",
             "sourceCompatibility": "not-established-by-analysis",
-            "speedSupplement": decoder.speed_supplement,
             "recordedProfile": "unknown",
         },
         "performance": performance.result(invalid),

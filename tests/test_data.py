@@ -193,34 +193,6 @@ def test_dbc_mph_normalizes_and_unknown_units_and_gear_codes_stay_unavailable(te
     assert store.snapshot(now=0)["signals"]["driveGear"]["value"] is None
 
 
-def test_speed_supplement_selects_only_speed_and_keeps_primary_battery(telemetry_dbc: Path, tmp_path: Path) -> None:
-    telemetry_dbc.write_text(
-        telemetry_dbc.read_text()
-        .replace(' SG_ DI_vehicleSpeed : 0|16@1+ (0.01,0) [0|450] "kph" TEST\n', "")
-        .replace('VAL_ 100 DI_vehicleSpeed 65535 "SNA";\n', "")
-    )
-    supplement = tmp_path / "speed-only.dbc"
-    supplement.write_text("""VERSION "synthetic supplement"
-NS_ :
-BS_:
-BU_: TEST
-BO_ 103 Speed: 8 TEST
- SG_ DI_vehicleSpeed : 0|16@1+ (0.01,0) [0|450] "kph" TEST
- SG_ BMS_dcLinkVoltage : 16|16@1+ (1,0) [0|1000] "V" TEST
-BO_ 101 MustNotReplaceBattery: 8 TEST
- SG_ BMS_socUI : 0|8@1+ (1,0) [0|100] "%" TEST
-""")
-    decoder = Decoder(telemetry_dbc, supplement)
-    assert decoder.decode(103, bytes.fromhex("1027000000000000"))[0] == {"speedKmh": 100}
-    assert decoder.decode(101, bytes.fromhex("8813000000000000"))[0]["displayedChargePercent"] == 50
-    assert decoder.decode(100, bytes.fromhex("0000040000000000"))[0]["driveGear"] == 4
-    with pytest.raises(ValueError):
-        Decoder(None, supplement)
-    supplement.write_text(supplement.read_text().replace("BO_ 103 Speed:", "BO_ 100 Speed:"))
-    with pytest.raises(ValueError):
-        Decoder(telemetry_dbc, supplement)
-
-
 def test_opted_in_startup_capture_is_live_only_and_failure_does_not_stop_receiver(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -266,9 +238,57 @@ def test_opted_in_startup_capture_is_live_only_and_failure_does_not_stop_receive
 
 @pytest.mark.parametrize("key,value", [("id", True), ("time", 10**400), ("monotonicNs", 10**400), ("monotonicNs", True)])
 def test_malformed_numeric_fields_fail_as_recording_errors(tmp_path: Path, key: str, value: int) -> None:
-    record = {"id": 0x132, "data": "0000000000000000", "time": 0, "monotonicNs": 0}
-    record[key] = value
+    record = {"id": 0x132, "data": "0000000000000000", "time": 0, "monotonicNs": 0, key: value}
     path = tmp_path / "bad.jsonl"
     path.write_text(json.dumps(record) + "\n")
     with pytest.raises(ValueError):
         list(read_frames(path))
+
+
+@pytest.mark.parametrize("limit_kind", ["bytes", "frames"])
+def test_recording_rolls_into_analyzable_chunks_without_losing_boundary_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, limit_kind: str
+) -> None:
+    from tesla_can_dashboard import recording
+    from tesla_can_dashboard.analysis import analyze_recording
+
+    sample = frame()
+    if limit_kind == "bytes":
+        monkeypatch.setattr(recording, "MAX_ANALYSIS_BYTES", len(sample.encode()) * 2)
+    else:
+        monkeypatch.setattr(recording, "MAX_ANALYSIS_FRAMES", 2)
+    recorder = Recorder(tmp_path, maximum_bytes=len(sample.encode()) * 7, reserve_bytes=0)
+    recorder.start()
+    for _ in range(7):
+        recorder.append(sample)
+    recorder.stop()
+    sessions = recorder.status()["sessions"]
+    assert len(sessions) == 4
+    lengths = []
+    for session in sessions:
+        path = recorder.path(session["id"])
+        lengths.append(len(list(read_frames(path))))
+        assert path.stat().st_size <= recording.MAX_ANALYSIS_BYTES
+        assert lengths[-1] <= recording.MAX_ANALYSIS_FRAMES
+        assert analyze_recording(path, Decoder())["quality"] != "invalid"
+    assert sorted(lengths) == [1, 2, 2, 2]
+    assert sum(lengths) == 7
+    assert recorder.bytes_used == len(sample.encode()) * 7
+    saved = {item["id"]: recorder.path(item["id"]).read_bytes() for item in sessions}
+    with pytest.raises(ValueError):
+        recorder.start()
+    assert saved == {item["id"]: recorder.path(item["id"]).read_bytes() for item in sessions}
+
+
+def test_rollover_stops_at_total_budget_without_losing_saved_chunks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tesla_can_dashboard import recording
+
+    sample = frame()
+    monkeypatch.setattr(recording, "MAX_ANALYSIS_FRAMES", 2)
+    recorder = Recorder(tmp_path, maximum_bytes=len(sample.encode()) * 3, reserve_bytes=0)
+    recorder.start()
+    for _ in range(4):
+        recorder.append(sample)
+    assert recorder.active_id is None
+    assert recorder.last_error
+    assert sum(len(list(read_frames(recorder.path(item["id"])))) for item in recorder.status()["sessions"]) == 3

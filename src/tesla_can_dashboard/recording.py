@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+MAX_ANALYSIS_BYTES = 64 * 1024 * 1024
+MAX_ANALYSIS_FRAMES = 500_000
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
 
 
@@ -87,6 +89,8 @@ class Recorder:
         self.active_id: str | None = None
         self.stream = None
         self.bytes_used = 0
+        self.session_bytes = 0
+        self.session_frames = 0
         self.last_error: str | None = None
         self.last_space_check = 0.0
         self.analysis_ids: set[str] = set()
@@ -107,6 +111,8 @@ class Recorder:
             session_id = uuid.uuid4().hex
             self.stream = (self.directory / f"{session_id}.jsonl").open("xb", buffering=0)
             self.active_id = session_id
+            self.session_bytes = 0
+            self.session_frames = 0
             self.last_error = None
             self.last_space_check = 0
             return session_id
@@ -129,12 +135,23 @@ class Recorder:
                     self.last_error = "Recording stopped at its storage limit; saved sessions were kept"
                     self.stop()
                     return
+                if len(encoded) > MAX_ANALYSIS_BYTES:
+                    self.last_error = "Recording stopped because a frame exceeds the chunk limit"
+                    self.stop()
+                    return
+                if self.session_bytes + len(encoded) > MAX_ANALYSIS_BYTES or self.session_frames >= MAX_ANALYSIS_FRAMES:
+                    self.stop()
+                    if self.last_error:
+                        return
+                    self.start()
                 written = self.stream.write(encoded)
                 if written != len(encoded):
                     raise OSError("Incomplete recording write")
                 self.bytes_used += written
-            except OSError:
-                self.last_error = "Recording stopped because storage is unavailable"
+                self.session_bytes += written
+                self.session_frames += 1
+            except (OSError, ValueError) as error:
+                self.last_error = str(error) if isinstance(error, ValueError) else "Recording stopped because storage is unavailable"
                 self.stop()
 
     def stop(self) -> None:
