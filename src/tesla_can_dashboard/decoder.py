@@ -138,12 +138,12 @@ class Decoder:
 
     def _decode_message(self, message: Message, data: bytes) -> dict:
         try:
-            return message.decode(data, decode_choices=False, allow_truncated=False)
+            return message.decode_simple(data, decode_choices=False)
         except cantools.database.errors.DecodeError:
             header = self.multiplexer_headers.get(message.frame_id)
             if header is None:
                 raise
-            roots = header.message.decode(data, decode_choices=False, allow_truncated=False)
+            roots = header.message.decode_simple(data, decode_choices=False)
             selected = roots[header.selector]
             if not isinstance(selected, int) or selected in header.supported:
                 raise
