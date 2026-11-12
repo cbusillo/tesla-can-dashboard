@@ -15,7 +15,14 @@ import {
   type TooltipComponentOption,
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
-import { convert, displayUnit, type DialRange, type Reading } from "./types";
+import {
+  convert,
+  display,
+  displayUnit,
+  readingStatus,
+  type DialRange,
+  type Reading,
+} from "./types";
 echarts.use([
   GaugeChart,
   LineChart,
@@ -100,22 +107,31 @@ export function Chart({
 }
 export function Dial({
   reading,
+  unit,
   range,
   units,
   dark,
   label,
 }: {
-  reading: Reading;
+  reading: Reading | undefined;
+  unit: string;
   range: DialRange;
   units: string;
   dark: boolean;
   label: string;
 }) {
-  const value = convert(reading.value!, reading.unit, units),
-    minimum = convert(range.minimum, reading.unit, units),
-    maximum = convert(range.maximum, reading.unit, units);
+  const usable =
+    reading &&
+    reading.value !== null &&
+    Number.isFinite(reading.value) &&
+    (reading?.quality === "fresh" || reading?.quality === "stale");
+  const value = usable ? convert(reading.value!, unit, units) : null,
+    minimum = convert(range.minimum, unit, units),
+    maximum = convert(range.maximum, unit, units);
   const primary =
-    reading.quality === "fresh" ? color("chart-primary") : color("chart-muted");
+    reading?.quality === "fresh"
+      ? color("chart-primary")
+      : color("chart-muted");
   const option: Option = {
     series: [
       {
@@ -124,56 +140,74 @@ export function Dial({
         max: maximum,
         startAngle: 210,
         endAngle: -30,
-        radius: "85%",
-        center: ["50%", "48%"],
+        radius: "95%",
+        center: ["50%", "58%"],
         splitNumber: 4,
         axisLine: {
-          lineStyle: { width: 5, color: [[1, color("chart-track")]] },
+          lineStyle: { width: 4, color: [[1, color("chart-track")]] },
         },
         progress: {
-          show: reading.quality === "fresh",
-          width: 5,
-          itemStyle: { color: primary },
+          show: true,
+          width: 4,
+          itemStyle: {
+            color: primary,
+            opacity: usable && reading?.quality === "fresh" ? 1 : 0,
+          },
         },
-        pointer: {
-          show: reading.quality === "fresh",
-          length: "55%",
-          width: 3,
-          itemStyle: { color: primary },
+        pointer: { show: false },
+        axisTick: {
+          show: true,
+          splitNumber: 4,
+          length: 3,
+          lineStyle: { color: color("chart-muted"), width: 1 },
         },
-        axisTick: { show: false },
         splitLine: {
           length: 7,
           lineStyle: { color: color("chart-muted"), width: 1 },
         },
         axisLabel: {
-          distance: 12,
+          distance: -18,
           color: color("chart-muted"),
           fontSize: 10,
           formatter: (v) => Number(v.toFixed(1)).toString(),
         },
-        anchor: { show: true, size: 7, itemStyle: { color: primary } },
+        anchor: { show: false },
         title: { show: false },
         detail: {
           valueAnimation: false,
-          offsetCenter: [0, "62%"],
-          fontSize: 25,
+          offsetCenter: [0, "-2%"],
+          fontSize: 48,
+          fontWeight: 350,
           color: color(
-            reading.quality === "fresh" ? "chart-text" : "chart-muted",
+            reading?.quality === "fresh" ? "chart-text" : "chart-muted",
           ),
           fontFamily: getComputedStyle(document.documentElement).fontFamily,
-          formatter: () => value.toFixed(reading.unit === "V" ? 2 : 1),
+          formatter: () =>
+            value === null ? "—" : value.toFixed(unit === "V" ? 2 : 1),
         },
-        data: [{ value: Math.max(minimum, Math.min(maximum, value)) }],
+        data: [
+          {
+            value:
+              value === null
+                ? minimum
+                : Math.max(minimum, Math.min(maximum, value)),
+          },
+        ],
       },
     ],
   };
   return (
     <div data-theme={dark ? "night" : "day"}>
-      <Chart option={option} height={200} label={label + " dial"} />
+      <Chart
+        option={option}
+        height={190}
+        label={`${label}: ${display(reading, units)}${readingStatus(reading) ? ", " + readingStatus(reading) : ""}`}
+      />
       <div class="dial-unit">
-        {displayUnit(reading.unit, units)}
-        {value < minimum || value > maximum ? " · outside dial range" : ""}
+        {displayUnit(unit, units)}
+        {value !== null && (value < minimum || value > maximum)
+          ? " · outside dial range"
+          : ""}
       </div>
     </div>
   );
@@ -184,14 +218,21 @@ export function History({
   dark,
   label,
   staleAfter = 3,
+  height = 160,
 }: {
   reading: Reading | undefined;
   units: string;
   dark: boolean;
   label: string;
   staleAfter?: number;
+  height?: number;
 }) {
-  const points = reading?.history || [];
+  const points = (reading?.history || []).filter(
+    (point) =>
+      point.length >= 2 &&
+      Number.isFinite(point[0]) &&
+      Number.isFinite(point[1]),
+  );
   const history: (number | null)[][] = [];
   for (let index = 0; index < points.length; index++) {
     const previous = points[index - 1],
@@ -223,15 +264,25 @@ export function History({
     },
     xAxis: {
       type: "time",
+      min: points.length
+        ? points[0][0] * 1000 - (points.length === 1 ? 60000 : 0)
+        : undefined,
+      max: points.length ? points[points.length - 1][0] * 1000 : undefined,
+      splitNumber: 3,
       axisLabel: { color: color("chart-muted"), fontSize: 10 },
       axisLine: { lineStyle: { color: color("chart-track") } },
       splitLine: { show: false },
     },
     yAxis: {
       type: "value",
+      splitNumber: 2,
       min: lowest - padding,
       max: highest + padding,
-      axisLabel: { color: color("chart-muted"), fontSize: 10 },
+      axisLabel: {
+        color: color("chart-muted"),
+        fontSize: 10,
+        formatter: (v: number) => Number(v.toFixed(2)).toString(),
+      },
       splitLine: { lineStyle: { color: color("chart-track") } },
     },
     series: [
@@ -254,7 +305,17 @@ export function History({
   };
   return (
     <div data-theme={dark ? "night" : "day"}>
-      <Chart option={option} height={160} label={label + " recent history"} />
+      {points.length ? (
+        <Chart
+          option={option}
+          height={height}
+          label={label + " recent history"}
+        />
+      ) : (
+        <div class="history-empty" style={{ height }}>
+          No history available
+        </div>
+      )}
     </div>
   );
 }
@@ -315,14 +376,20 @@ export function CellChart({
   };
   return (
     <div class="cell-chart-wrap" data-theme={dark ? "night" : "day"}>
-      <Chart
-        option={option}
-        height={185}
-        label="Cell group voltages by group number"
-        onPointClick={(index) => {
-          if (cells[index]) onSelect(cells[index].index);
-        }}
-      />
+      {fresh.length ? (
+        <Chart
+          option={option}
+          height={145}
+          label="Cell group voltages by group number"
+          onPointClick={(index) => {
+            if (cells[index]) onSelect(cells[index].index);
+          }}
+        />
+      ) : (
+        <div class="history-empty" style={{ height: 145 }}>
+          No fresh cell samples
+        </div>
+      )}
     </div>
   );
 }

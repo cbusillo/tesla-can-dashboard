@@ -1,17 +1,16 @@
-import { render, type ComponentChildren } from "preact";
+import { render } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { initialize } from "@ionic/core/components";
 import { addIcons } from "ionicons";
 import {
   batteryHalfOutline,
-  thermometerOutline,
   gridOutline,
   settingsOutline,
   moonOutline,
   documentTextOutline,
   speedometerOutline,
-  addOutline,
   optionsOutline,
+  flashOutline,
 } from "ionicons/icons";
 import "@ionic/core/css/core.css";
 import "@ionic/core/css/normalize.css";
@@ -42,21 +41,20 @@ import {
   sourceStatus,
   type Definition,
   type Layout,
-  type Reading,
   type Snapshot,
 } from "./types";
+import { Metric, Page, Performance } from "./dashboard";
 import "./style.css";
 initialize({ mode: "ios", animated: false });
 addIcons({
   batteryHalfOutline,
-  thermometerOutline,
   gridOutline,
   settingsOutline,
   moonOutline,
   documentTextOutline,
   speedometerOutline,
-  addOutline,
   optionsOutline,
+  flashOutline,
 });
 defineComponents();
 
@@ -189,70 +187,6 @@ function useDashboard() {
     save,
   };
 }
-function Row({
-  label,
-  reading,
-  units,
-  icon,
-  decimals,
-}: {
-  label: string;
-  reading: Reading | undefined;
-  units: string;
-  icon?: string;
-  decimals?: number;
-}) {
-  return (
-    <ion-item>
-      {icon && <ion-icon slot="start" name={icon} color="primary" />}
-      <ion-label>
-        {label}
-        {readingStatus(reading) && <p>{readingStatus(reading)}</p>}
-      </ion-label>
-      <ion-note
-        slot="end"
-        color={reading?.quality === "fresh" ? "dark" : "medium"}
-      >
-        {display(reading, units, decimals)}
-      </ion-note>
-    </ion-item>
-  );
-}
-function Page({
-  name,
-  title,
-  status,
-  children,
-  toggleTheme,
-  toolbar,
-}: {
-  name: string;
-  title: string;
-  status: string;
-  children: ComponentChildren;
-  toggleTheme: () => void;
-  toolbar?: ComponentChildren;
-}) {
-  return (
-    <ion-tab tab={name}>
-      <ion-header>
-        <ion-toolbar>
-          <ion-title>{title}</ion-title>
-          <ion-buttons slot="end">
-            {toolbar}
-            <ion-button onClick={toggleTheme} aria-label="Change appearance">
-              <ion-icon name="moon-outline" slot="icon-only" />
-            </ion-button>
-          </ion-buttons>
-        </ion-toolbar>
-        <div class="connection-note">
-          <ion-note>{status}</ion-note>
-        </div>
-      </ion-header>
-      <ion-content color="light">{children}</ion-content>
-    </ion-tab>
-  );
-}
 function App() {
   const {
     data,
@@ -265,8 +199,8 @@ function App() {
     act,
     save,
   } = useDashboard();
-  const [tab, setTab] = useState("battery"),
-    [selectedCell, setSelectedCell] = useState<number | null>(null),
+  const [tab, setTab] = useState("instruments"),
+    [selectedCell, setSelectedCell] = useState<number | null>(1),
     [editKey, setEditKey] = useState<string | null>(null),
     [rangeMin, setRangeMin] = useState(""),
     [rangeMax, setRangeMax] = useState(""),
@@ -276,7 +210,7 @@ function App() {
     [deviceDark, setDeviceDark] = useState(
       matchMedia("(prefers-color-scheme: dark)").matches,
     );
-  const tabs = useRef<HTMLIonTabsElement>(null);
+  const [historyKey, setHistoryKey] = useState("voltageV");
   const dark =
     layout.theme === "night" || (layout.theme === "auto" && deviceDark);
   useEffect(() => {
@@ -288,14 +222,12 @@ function App() {
   }, []);
   useLayoutEffect(() => {
     document.documentElement.classList.toggle("ion-palette-dark", dark);
+    document.documentElement.dataset.theme = dark ? "night" : "day";
   }, [dark]);
   const replay = data?.mode === "replay",
     demo = data?.replay?.source === "demonstration";
   const status = sourceStatus(data, offline);
   const theme = () => save({ ...layout, theme: dark ? "day" : "night" });
-  const navigate = (name: string) => {
-    tabs.current?.select(name);
-  };
   const signals = data?.signals || {},
     cells = data?.cellGroups || [],
     fresh = cells.filter((c) => c.quality === "fresh" && c.value !== null),
@@ -360,373 +292,421 @@ function App() {
     catalog.find((d) => d.key === editKey)?.unit || "",
     layout.units,
   );
+  const historyDefinition = catalog.find((d) => d.key === historyKey);
+  function instrument(key: string, dial = false) {
+    const definition = catalog.find((d) => d.key === key),
+      reading = signals[key];
+    const label = definition?.label || key;
+    return (
+      <section
+        class={`instrument ${reading?.quality || "unavailable"}`}
+        key={key}
+      >
+        <div class="instrument-heading">
+          <h2>{label}</h2>
+          <ion-button
+            fill="clear"
+            onClick={() => openRange(key)}
+            aria-label={`Configure ${label}`}
+          >
+            <ion-icon name="options-outline" slot="icon-only" />
+          </ion-button>
+        </div>
+        {dial ? (
+          <Suspense fallback={<div class="chart-loading">Loading dial…</div>}>
+            <Dial
+              reading={reading}
+              unit={definition?.unit || ""}
+              range={
+                layout.ranges[key] || {
+                  minimum: definition?.minimum ?? 0,
+                  maximum: definition?.maximum ?? 100,
+                }
+              }
+              units={layout.units}
+              dark={dark}
+              label={label}
+            />
+          </Suspense>
+        ) : (
+          <div class="reading">{display(reading, layout.units)}</div>
+        )}
+        <div class="quality">{readingStatus(reading)}</div>
+        {layout.presentation === "history" && (
+          <Suspense fallback={<p>Loading history…</p>}>
+            <History
+              reading={reading}
+              units={layout.units}
+              dark={dark}
+              label={label}
+              staleAfter={definition?.stale_after}
+            />
+          </Suspense>
+        )}
+      </section>
+    );
+  }
+  const charge = signals.displayedChargePercent;
+  const showCharge = charge?.quality === "fresh" && charge.value !== null;
   return (
     <ion-app>
-      <ion-text color="dark" id="chart-text" hidden />
-      <ion-note color="primary" id="chart-primary" hidden />
-      <ion-note color="medium" id="chart-muted" hidden />
-      <ion-note color="light" id="chart-track" hidden />
-      <ion-note color="tertiary" id="chart-accent" hidden />
+      <span id="chart-text" hidden />
+      <span id="chart-primary" hidden />
+      <span id="chart-muted" hidden />
+      <span id="chart-track" hidden />
+      <span id="chart-accent" hidden />
       {(actionError || data?.replay?.error) && (
         <div class="message" role="alert">
           {actionError || data?.replay?.error}
           {actionError && (
-            <ion-button
-              fill="clear"
-              size="small"
-              onClick={() => setActionError("")}
-            >
+            <ion-button fill="clear" onClick={() => setActionError("")}>
               Dismiss
             </ion-button>
           )}
         </div>
       )}
-      <ion-tabs
-        ref={tabs}
-        onionTabsDidChange={(event) => setTab(event.detail.tab)}
-      >
-        <Page name="battery" title="Battery" {...common}>
-          <ion-grid fixed>
-            <ion-row>
-              <ion-col size="12" size-md="6">
-                <ion-list-header>
-                  <ion-label>Charge</ion-label>
-                </ion-list-header>
-                <ion-list inset>
-                  <Row
-                    label="State of charge"
-                    reading={signals.displayedChargePercent}
-                    units={layout.units}
-                    icon="battery-half-outline"
-                  />
-                  {signals.displayedChargePercent?.quality === "fresh" && (
-                    <ion-item lines="none">
-                      <ion-progress-bar
-                        color="success"
-                        value={
-                          (signals.displayedChargePercent.value ?? 0) / 100
-                        }
-                      />
-                    </ion-item>
-                  )}
-                  <Row
-                    label="Remaining energy"
-                    reading={signals.remainingEnergyKwh}
-                    units={layout.units}
-                  />
-                  <Row
-                    label="Full pack energy"
-                    reading={signals.fullPackEnergyKwh}
-                    units={layout.units}
-                  />
-                </ion-list>
-                <ion-list-header>
-                  <ion-label>Electrical</ion-label>
-                </ion-list-header>
-                <ion-list inset>
-                  <Row
-                    label="Pack voltage"
-                    reading={signals.voltageV}
-                    units={layout.units}
-                  />
-                  <Row
-                    label="Pack current"
-                    reading={signals.currentA}
-                    units={layout.units}
-                  />
-                </ion-list>
-              </ion-col>
-              <ion-col size="12" size-md="6">
-                <ion-list-header>
-                  <ion-label>Temperature</ion-label>
-                </ion-list-header>
-                <ion-list inset>
-                  <Row
-                    label="Lowest"
-                    reading={signals.minimumTemperatureC}
-                    units={layout.units}
-                    icon="thermometer-outline"
-                  />
-                  <Row
-                    label="Highest"
-                    reading={signals.maximumTemperatureC}
-                    units={layout.units}
-                  />
-                </ion-list>
-                <ion-list-header>
-                  <ion-label>Cell groups</ion-label>
-                </ion-list-header>
-                <ion-list inset>
-                  <ion-item button detail onClick={() => navigate("cells")}>
-                    <ion-icon
-                      slot="start"
-                      name="grid-outline"
-                      color="primary"
-                    />
-                    <ion-label>
-                      <h2>Voltage balance</h2>
-                      <p>
-                        {data?.freshCellCount || 0} / {cells.length || "—"}{" "}
-                        groups fresh
-                      </p>
-                    </ion-label>
-                    <ion-note slot="end" color="dark">
-                      {spread}
-                    </ion-note>
-                  </ion-item>
-                  <ion-item
-                    button
-                    detail
-                    onClick={() => navigate("instruments")}
-                  >
-                    <ion-icon
-                      slot="start"
-                      name="speedometer-outline"
-                      color="primary"
-                    />
-                    <ion-label>Dials and history</ion-label>
-                  </ion-item>
-                </ion-list>
-                <ion-list-header>
-                  <ion-label>Charging</ion-label>
-                </ion-list-header>
-                <ion-list inset>
-                  <Row
-                    label="Charging power"
-                    reading={signals.chargingPowerKw}
-                    units={layout.units}
-                  />
-                  <Row
-                    label="Charge limit"
-                    reading={signals.chargeLimitPercent}
-                    units={layout.units}
-                  />
-                </ion-list>
-              </ion-col>
-            </ion-row>
-          </ion-grid>
-        </Page>
+      <ion-tabs onionTabsDidChange={(event) => setTab(event.detail.tab)}>
         <Page
           name="instruments"
-          title="Instruments"
+          title="Overview"
           {...common}
           toolbar={
             <ion-button
+              fill="clear"
               onClick={() => setChooseOpen(true)}
               aria-label="Choose instruments"
             >
-              <ion-icon slot="icon-only" name="add-outline" />
+              <ion-icon slot="icon-only" name="options-outline" />
             </ion-button>
           }
         >
-          <ion-toolbar>
-            <ion-segment
-              value={layout.presentation}
-              onionChange={(event) =>
-                save({
-                  ...layout,
-                  presentation: event.detail.value as Layout["presentation"],
-                })
-              }
-            >
-              <ion-segment-button value="dials">
-                <ion-label>Dials</ion-label>
-              </ion-segment-button>
-              <ion-segment-button value="readings">
-                <ion-label>Readings</ion-label>
-              </ion-segment-button>
-              <ion-segment-button value="history">
-                <ion-label>History</ion-label>
-              </ion-segment-button>
-            </ion-segment>
-          </ion-toolbar>
-          {!layout.instruments.length && (
-            <div class="ion-padding">
-              <p>Choose the signals you want to watch.</p>
-              <ion-button onClick={() => setChooseOpen(true)}>
-                Choose instruments
-              </ion-button>
+          <main class="overview">
+            <div class="charge-context">
+              <div class="charge-level">
+                <ion-icon name="battery-half-outline" aria-hidden="true" />
+                <span>Charge</span>
+                <strong>{display(charge, layout.units)}</strong>
+                {readingStatus(charge) && (
+                  <small>{readingStatus(charge)}</small>
+                )}
+              </div>
+              <label class="compact-select">
+                <span class="sr-only">Instrument display</span>
+                <select
+                  aria-label="Instrument display"
+                  value={layout.presentation}
+                  disabled={busy}
+                  onChange={(e) =>
+                    save({
+                      ...layout,
+                      presentation: e.currentTarget
+                        .value as Layout["presentation"],
+                    })
+                  }
+                >
+                  <option value="dials">Dials</option>
+                  <option value="readings">Readings</option>
+                  <option value="history">History</option>
+                </select>
+              </label>
             </div>
-          )}
-          <ion-grid fixed>
-            <ion-row>
-              {layout.instruments.map((key) => {
-                const definition = catalog.find((c) => c.key === key),
-                  reading = signals[key],
-                  valid =
-                    reading?.value !== null &&
-                    reading?.value !== undefined &&
-                    reading.quality !== "invalid",
-                  range = layout.ranges[key] || {
-                    minimum: definition?.minimum ?? 0,
-                    maximum: definition?.maximum ?? 100,
-                  };
-                return (
-                  <ion-col
-                    size="12"
-                    size-sm="6"
-                    size-md={layout.presentation === "history" ? "6" : "4"}
-                    key={key}
-                  >
-                    <ion-card>
-                      <ion-card-header>
-                        <div class="instrument-heading">
-                          <ion-card-title>
-                            {definition?.label || key}
-                          </ion-card-title>
+            {!layout.instruments.length && (
+              <div class="empty">
+                <p>Choose the signals you want to watch.</p>
+                <ion-button onClick={() => setChooseOpen(true)}>
+                  Choose instruments
+                </ion-button>
+              </div>
+            )}
+            {tab === "instruments" &&
+              (layout.presentation === "dials" ? (
+                <>
+                  <div class="cluster">
+                    {layout.instruments
+                      .slice(0, 2)
+                      .map((key) => instrument(key, true))}
+                  </div>
+                  {!!layout.instruments.slice(2).length && (
+                    <div class="metric-strip selected-metrics">
+                      {layout.instruments.slice(2).map((key) => (
+                        <Metric
+                          key={key}
+                          label={
+                            catalog.find((d) => d.key === key)?.label || key
+                          }
+                          reading={signals[key]}
+                          units={layout.units}
+                        >
                           <ion-button
                             fill="clear"
-                            size="small"
                             onClick={() => openRange(key)}
-                            aria-label={
-                              "Configure " + (definition?.label || key)
-                            }
+                            aria-label={`Configure ${catalog.find((d) => d.key === key)?.label || key}`}
                           >
                             <ion-icon name="options-outline" slot="icon-only" />
                           </ion-button>
-                        </div>
-                      </ion-card-header>
-                      <ion-card-content>
-                        {layout.presentation === "dials" &&
-                        valid &&
-                        tab === "instruments" ? (
-                          <Suspense
-                            fallback={<ion-note>Loading dial…</ion-note>}
-                          >
-                            <Dial
-                              reading={reading}
-                              range={range}
-                              units={layout.units}
-                              dark={dark}
-                              label={definition?.label || key}
-                            />
-                          </Suspense>
-                        ) : (
-                          <div
-                            class={
-                              "reading " + (reading?.quality || "unavailable")
-                            }
-                          >
-                            {display(reading, layout.units)}
-                          </div>
-                        )}
-                        {layout.presentation === "history" &&
-                          tab === "instruments" && (
-                            <Suspense
-                              fallback={<ion-note>Loading history…</ion-note>}
-                            >
-                              <History
-                                reading={reading}
-                                units={layout.units}
-                                dark={dark}
-                                label={definition?.label || key}
-                                staleAfter={definition?.stale_after}
-                              />
-                            </Suspense>
-                          )}
-                        {readingStatus(reading) && (
-                          <p class="quality">{readingStatus(reading)}</p>
-                        )}
-                      </ion-card-content>
-                    </ion-card>
-                  </ion-col>
-                );
-              })}
-            </ion-row>
-          </ion-grid>
-        </Page>
-        <Page name="cells" title="Cell groups" {...common}>
-          <ion-list-header>
-            <ion-label>Voltage balance</ion-label>
-          </ion-list-header>
-          <ion-list inset>
-            <ion-item>
-              <ion-label>Spread across all groups</ion-label>
-              <ion-note slot="end" color="dark">
-                {spread}
-              </ion-note>
-            </ion-item>
-            <ion-item>
-              <ion-label>Fresh groups</ion-label>
-              <ion-note slot="end" color="dark">
-                {data?.freshCellCount || 0} / {cells.length || "—"}
-              </ion-note>
-            </ion-item>
-            {fresh.length > 0 && (
-              <>
-                <ion-item>
-                  <ion-label>Lowest fresh group</ion-label>
-                  <ion-note slot="end" color="dark">
-                    {Math.min(...fresh.map((c) => c.value!)).toFixed(4)} V
-                  </ion-note>
-                </ion-item>
-                <ion-item>
-                  <ion-label>Highest fresh group</ion-label>
-                  <ion-note slot="end" color="dark">
-                    {Math.max(...fresh.map((c) => c.value!)).toFixed(4)} V
-                  </ion-note>
-                </ion-item>
-              </>
+                        </Metric>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div class="instrument-grid">
+                  {layout.instruments.map((key) => instrument(key))}
+                </div>
+              ))}
+            {layout.presentation !== "history" && (
+              <section class="history-panel">
+                <div class="section-heading">
+                  <h2>Recent history</h2>
+                  <label class="compact-select">
+                    <span class="sr-only">History signal</span>
+                    <select
+                      aria-label="History signal"
+                      value={historyKey}
+                      onChange={(e) => setHistoryKey(e.currentTarget.value)}
+                    >
+                      {catalog.map((d) => (
+                        <option value={d.key} key={d.key}>
+                          {d.label} ({displayUnit(d.unit, layout.units)})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {tab === "instruments" && (
+                  <Suspense fallback={<p>Loading history…</p>}>
+                    <History
+                      reading={signals[historyKey]}
+                      units={layout.units}
+                      dark={dark}
+                      label={historyDefinition?.label || historyKey}
+                      staleAfter={historyDefinition?.stale_after}
+                      height={80}
+                    />
+                  </Suspense>
+                )}
+              </section>
             )}
-          </ion-list>
-          {fresh.length > 0 && tab === "cells" && (
-            <ion-card>
-              <ion-card-content>
-                <Suspense fallback={<ion-note>Loading cell chart…</ion-note>}>
-                  <CellChart
-                    cells={cells}
-                    selected={selectedCell}
-                    onSelect={setSelectedCell}
+          </main>
+        </Page>
+        <Page name="cells" title="Battery / Cells" {...common}>
+          <main class="cells-page">
+            <div class="screen-heading">
+              <div>
+                <h2>Cell voltage</h2>
+                <p>
+                  {fresh.length} / {cells.length || "—"} groups fresh
+                </p>
+              </div>
+              <div class="cells-summary">
+                <div>
+                  <small>Spread · all groups</small>
+                  <strong>{spread}</strong>
+                </div>
+                <div>
+                  <small>Lowest / highest fresh</small>
+                  <strong>
+                    {fresh.length
+                      ? `${Math.min(...fresh.map((c) => c.value!)).toFixed(3)} / ${Math.max(...fresh.map((c) => c.value!)).toFixed(3)} V`
+                      : "—"}
+                  </strong>
+                </div>
+              </div>
+            </div>
+            {tab === "cells" && (
+              <Suspense fallback={<p>Loading cell chart…</p>}>
+                <CellChart
+                  cells={cells}
+                  selected={selectedCell}
+                  onSelect={setSelectedCell}
+                  dark={dark}
+                />
+              </Suspense>
+            )}
+            <div class="cell-workbench">
+              <div
+                class="cell-grid"
+                role="group"
+                aria-label="Select cell group"
+              >
+                {cells.map((c) => (
+                  <button
+                    key={c.index}
+                    class={c.index === selectedCell ? "selected" : ""}
+                    aria-label={`Group ${c.index}`}
+                    aria-pressed={c.index === selectedCell}
+                    onClick={() => setSelectedCell(c.index)}
+                  >
+                    {String(c.index).padStart(2, "0")}
+                  </button>
+                ))}
+              </div>
+              <aside
+                class={`cell-detail ${cell?.quality || "unavailable"}`}
+                aria-live="polite"
+              >
+                <label class="group-choice">
+                  Group{" "}
+                  <select
+                    aria-label="Selected cell group"
+                    value={selectedCell || ""}
+                    onChange={(e) =>
+                      setSelectedCell(Number(e.currentTarget.value))
+                    }
+                  >
+                    {cells.map((c) => (
+                      <option value={c.index} key={c.index}>
+                        {c.index}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div class="selected-voltage">{display(cell, "metric", 4)}</div>
+                <p class="quality">{readingStatus(cell) || "Fresh"}</p>
+                <div class="detail-row">
+                  <span>Observed low</span>
+                  <strong>
+                    {cell?.minimum == null
+                      ? "—"
+                      : cell.minimum.toFixed(4) + " V"}
+                  </strong>
+                </div>
+                <div class="detail-row">
+                  <span>Observed high</span>
+                  <strong>
+                    {cell?.maximum == null
+                      ? "—"
+                      : cell.maximum.toFixed(4) + " V"}
+                  </strong>
+                </div>
+                <div class="stepper">
+                  <button
+                    aria-label="Previous cell group"
+                    disabled={!cell || cells[0]?.index === cell.index}
+                    onClick={() =>
+                      setSelectedCell(
+                        cells[
+                          cells.findIndex((c) => c.index === selectedCell) - 1
+                        ]?.index ?? null,
+                      )
+                    }
+                  >
+                    ‹
+                  </button>
+                  <button
+                    aria-label="Next cell group"
+                    disabled={
+                      !cell || cells[cells.length - 1]?.index === cell.index
+                    }
+                    onClick={() =>
+                      setSelectedCell(
+                        cells[
+                          cells.findIndex((c) => c.index === selectedCell) + 1
+                        ]?.index ?? null,
+                      )
+                    }
+                  >
+                    ›
+                  </button>
+                </div>
+              </aside>
+            </div>
+          </main>
+        </Page>
+        <Page name="charging" title="Charging" {...common}>
+          <main class="charging-page">
+            <div class="screen-heading">
+              <div>
+                <h2>Battery charge</h2>
+                <p>Pack current uses the CAN sign.</p>
+              </div>
+              <div class={`charging-level ${charge?.quality || "unavailable"}`}>
+                <strong>{display(charge, layout.units)}</strong>
+                <small>{readingStatus(charge) || "State of charge"}</small>
+              </div>
+            </div>
+            <div
+              class={`charge-progress ${showCharge ? "" : "unknown"}`}
+              role="img"
+              aria-label={
+                showCharge
+                  ? `Charge ${charge.value}%`
+                  : "Charge progress unavailable"
+              }
+            >
+              {showCharge && (
+                <span
+                  style={{
+                    width: `${Math.max(0, Math.min(100, charge.value!))}%`,
+                  }}
+                />
+              )}
+            </div>
+            <div class="metric-strip charging-metrics">
+              <Metric
+                label="Pack voltage"
+                reading={signals.voltageV}
+                units={layout.units}
+              />
+              <Metric
+                label="Current (CAN sign)"
+                reading={signals.currentA}
+                units={layout.units}
+              />
+              <Metric
+                label="Remaining energy"
+                reading={signals.remainingEnergyKwh}
+                units={layout.units}
+              />
+              <Metric
+                label="Full pack energy"
+                reading={signals.fullPackEnergyKwh}
+                units={layout.units}
+              />
+            </div>
+            <section class="history-panel">
+              <div class="section-heading">
+                <h2>Pack current history</h2>
+                <small>A · recent samples</small>
+              </div>
+              {tab === "charging" && (
+                <Suspense fallback={<p>Loading history…</p>}>
+                  <History
+                    reading={signals.currentA}
+                    units={layout.units}
                     dark={dark}
+                    label="Pack current (CAN sign)"
+                    staleAfter={
+                      catalog.find((d) => d.key === "currentA")?.stale_after
+                    }
+                    height={130}
                   />
                 </Suspense>
-              </ion-card-content>
-            </ion-card>
-          )}
-          {cell && (
-            <ion-list inset>
-              <ion-item>
-                <ion-label>
-                  <h2>Group {cell.index}</h2>
-                  {readingStatus(cell) && <p>{readingStatus(cell)}</p>}
-                </ion-label>
-                <ion-note slot="end" color="dark">
-                  {display(cell, "metric", 4)}
-                </ion-note>
-              </ion-item>
-            </ion-list>
-          )}
-          <ion-list-header>
-            <ion-label>All measured groups</ion-label>
-          </ion-list-header>
-          <ion-list inset class="cell-list">
-            {cells.map((c) => (
-              <ion-item
-                button
-                color={selectedCell === c.index ? "primary" : undefined}
-                key={c.index}
-                onClick={() => setSelectedCell(c.index)}
-              >
-                <ion-label>
-                  Group {c.index}
-                  {readingStatus(c) && <p>{readingStatus(c)}</p>}
-                  {selectedCell === c.index &&
-                    c.minimum !== null &&
-                    c.maximum !== null && (
-                      <p>
-                        Observed {c.minimum.toFixed(4)}–{c.maximum.toFixed(4)} V
-                      </p>
-                    )}
-                </ion-label>
-                <ion-note
-                  slot="end"
-                  color={c.quality === "fresh" ? "dark" : "medium"}
-                >
-                  {display(c, "metric", 4)}
-                </ion-note>
-              </ion-item>
-            ))}
-          </ion-list>
+              )}
+            </section>
+            <div class="metric-strip charging-metrics">
+              <Metric
+                label="Lowest temperature"
+                reading={signals.minimumTemperatureC}
+                units={layout.units}
+              />
+              <Metric
+                label="Highest temperature"
+                reading={signals.maximumTemperatureC}
+                units={layout.units}
+              />
+              <Metric
+                label="Charging power"
+                reading={signals.chargingPowerKw}
+                units={layout.units}
+              />
+              <Metric
+                label="Charge limit"
+                reading={signals.chargeLimitPercent}
+                units={layout.units}
+              />
+            </div>
+          </main>
         </Page>
         <Page name="sessions" title="Sessions" {...common}>
           <ion-list-header>
@@ -827,47 +807,56 @@ function App() {
           )}
         </Page>
         <Page name="settings" title="Settings" {...common}>
-          <ion-list-header>
-            <ion-label>Display</ion-label>
-          </ion-list-header>
-          <ion-list inset>
-            <ion-item>
-              <ion-select
-                label="Appearance"
-                value={layout.theme}
-                interface="popover"
-                onionChange={(e) => save({ ...layout, theme: e.detail.value })}
-              >
-                <ion-select-option value="auto">System</ion-select-option>
-                <ion-select-option value="day">Day</ion-select-option>
-                <ion-select-option value="night">Night</ion-select-option>
-              </ion-select>
-            </ion-item>
-            <ion-item>
-              <ion-select
-                label="Units"
-                value={layout.units}
-                interface="popover"
-                onionChange={(e) => save({ ...layout, units: e.detail.value })}
-              >
-                <ion-select-option value="metric">Metric</ion-select-option>
-                <ion-select-option value="imperial">US</ion-select-option>
-              </ion-select>
-            </ion-item>
-            <ion-item button detail onClick={() => setChooseOpen(true)}>
-              <ion-label>Choose instruments</ion-label>
-            </ion-item>
-          </ion-list>
+          <main class="settings-page">
+            <ion-list-header>
+              <ion-label>Display</ion-label>
+            </ion-list-header>
+            <ion-list>
+              <ion-item>
+                <ion-select
+                  label="Appearance"
+                  value={layout.theme}
+                  disabled={busy}
+                  interface="popover"
+                  onionChange={(e) =>
+                    save({ ...layout, theme: e.detail.value })
+                  }
+                >
+                  <ion-select-option value="auto">System</ion-select-option>
+                  <ion-select-option value="day">Day</ion-select-option>
+                  <ion-select-option value="night">Night</ion-select-option>
+                </ion-select>
+              </ion-item>
+              <ion-item>
+                <ion-select
+                  label="Units"
+                  value={layout.units}
+                  disabled={busy}
+                  interface="popover"
+                  onionChange={(e) =>
+                    save({ ...layout, units: e.detail.value })
+                  }
+                >
+                  <ion-select-option value="metric">Metric</ion-select-option>
+                  <ion-select-option value="imperial">US</ion-select-option>
+                </ion-select>
+              </ion-item>
+              <ion-item button detail onClick={() => setChooseOpen(true)}>
+                <ion-label>Choose instruments</ion-label>
+              </ion-item>
+            </ion-list>
+            <Performance />
+          </main>
         </Page>
         <ion-tab-bar slot="bottom">
           {[
-            ["battery", "Battery", "battery-half-outline"],
-            ["instruments", "Instruments", "speedometer-outline"],
+            ["instruments", "Overview", "speedometer-outline"],
             ["cells", "Cells", "grid-outline"],
+            ["charging", "Charging", "flash-outline"],
             ["sessions", "Sessions", "document-text-outline"],
             ["settings", "Settings", "settings-outline"],
           ].map(([key, label, icon]) => (
-            <ion-tab-button tab={key}>
+            <ion-tab-button tab={key} key={key}>
               <ion-icon name={icon} />
               <ion-label>{label}</ion-label>
             </ion-tab-button>
