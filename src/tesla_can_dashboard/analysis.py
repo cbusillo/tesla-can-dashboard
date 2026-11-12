@@ -192,9 +192,7 @@ class Performance:
         self.finish("quarter-mile", previous_time + duration, (previous_mps + acceleration * duration) * 3.6)
 
     def result(self, invalid: bool) -> dict:
-        reasons = self.reasons | ({"missing_speed"} if not self.speed_samples else set())
-        if self.omitted_runs:
-            reasons.add("run_limit")
+        reasons = self.reasons
         groups = []
         for convention, keys in (
             ("standing-no-rollout-v1", ["0-60-mph", "0-100-kmh", "quarter-mile"]),
@@ -254,18 +252,18 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
     except AnalysisLimitError:
         raise
     except InterruptedTailError:
-        reasons.add("interrupted_tail")
+        performance.reasons.add("interrupted_tail")
         performance.pending.clear()
     except ValueError:
         reasons.add("invalid_recording")
         invalid = True
     if not frame_count:
         reasons.add("empty_recording")
-    reasons.update(performance.reasons)
     if performance.omitted_runs:
-        reasons.add("run_limit")
+        performance.reasons.add("run_limit")
     if not performance.speed_samples:
-        reasons.add("missing_speed")
+        performance.reasons.add("missing_speed")
+    reasons.update(performance.reasons)
     duration = (previous_ns - first_ns) / 1e9 if previous_ns is not None and first_ns is not None and not invalid else None
     power = observations["chargingPowerKw"]
     battery_signals = {key: observation.result(key) for key, observation in observations.items()}

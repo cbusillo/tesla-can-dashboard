@@ -183,3 +183,38 @@ def test_analysis_rejects_oversized_input_and_does_not_return_changed_recording(
         assert client.get(f"/api/recordings/{identifier}/analysis").status_code == 409
         assert not engine.recorder.analysis_ids
         assert not engine.analysis_lock.locked()
+
+
+def test_record_start_is_refused_during_inflight_analysis_then_recovers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    engine = Engine("synthetic", Recorder(tmp_path / "sessions", reserve_bytes=0))
+    monkeypatch.setattr(engine, "start", lambda: None)
+    identifier = engine.recorder.start()
+    engine.recorder.append(Frame(0x132, bytes(8), 0, 1))
+    engine.recorder.stop()
+    entered = threading.Event()
+    finish = threading.Event()
+
+    def slow_analysis(path: Path, decoder: Decoder) -> dict:
+        entered.set()
+        if not finish.wait(timeout=5):
+            raise TimeoutError("Analysis test was not released")
+        return analyze_recording(path, decoder)
+
+    monkeypatch.setattr("tesla_can_dashboard.engine.analyze_recording", slow_analysis)
+    with TestClient(create_app(engine, tmp_path)) as client, ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(client.get, f"/api/recordings/{identifier}/analysis")
+        try:
+            assert entered.wait(timeout=5)
+            assert client.post("/api/recordings/start").status_code == 409
+            engine.ingest(Frame(0x132, bytes(8), 0, 2))
+            assert engine.store.frames == 1
+            assert engine.recorder.active_id is None
+        finally:
+            finish.set()
+        assert pending.result(timeout=5).status_code == 200
+        assert client.post("/api/recordings/start").status_code == 200
+        assert client.get(f"/api/recordings/{identifier}/analysis").status_code == 409
+        client.post("/api/recordings/stop")

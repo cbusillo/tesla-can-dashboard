@@ -27,6 +27,12 @@ reserved/unavailable enum values invalidate readings. Missing gear enums do
 not establish forward direction. Charger line power is an AC input
 observation, not battery power, delivered pack energy or DC fast-charge power.
 Requested power and maximum power limits are not measured power.
+For a simple DBC multiplexer, an unsupported page contributes no mapped branch
+samples; existing branch readings retain their acquisition age and become stale
+normally. Independently defined root signals can still be decoded. Wrong DLC,
+invalid values on known pages and other decode failures remain errors. Nested
+multiplexers retain the decoder's existing error behavior; no unknown field is
+guessed from an unsupported page.
 
 ## Timing and quality
 
@@ -61,7 +67,8 @@ all results, including earlier plausible runs. An interrupted final line is
 excluded with `interrupted_tail` and partial quality; complete earlier runs
 and observations remain usable. Incomplete pending runs are never completed
 from the interrupted tail. Gap-free runs elsewhere can
-still appear with the session's warnings; warnings must stay visible.
+still appear with the session's warnings; partial/invalid status stays visible, with full warning context in the closed
+Timing and data quality disclosure.
 
 `battery.signals` supplies `quality`, `label`, `unit`, `samples`, `invalidSamples`,
 `gaps`, `first`, `last`, `minimum`, `maximum`, `observedDelta`,
@@ -88,7 +95,8 @@ A startup storage failure appears in recording status while the receiver and
 server continue. Each successful service start creates a new recording;
 this is not automatic per-drive segmentation or an indefinite recording promise.
 The same Recorder rolls over before either analysis input limit is exceeded:
-64 MiB or 500,000 frames per JSONL chunk. The boundary frame goes into the new
+64 MiB or 100,000 frames per JSONL chunk, with frame-count headroom below
+the analysis admission limit for slower machines. The boundary frame goes into the new
 chunk exactly once. Older chunks remain immutable and analyzable after capture stops. All chunks share the existing total budget and free-space
 reserve. Reaching either safeguard stops capture and reports the error;
 there is no deletion, overwrite or automatic restart loop. Runs do not bridge

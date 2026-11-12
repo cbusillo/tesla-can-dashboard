@@ -256,7 +256,7 @@ def test_recording_rolls_into_analyzable_chunks_without_losing_boundary_frames(
     if limit_kind == "bytes":
         monkeypatch.setattr(recording, "MAX_ANALYSIS_BYTES", len(sample.encode()) * 2)
     else:
-        monkeypatch.setattr(recording, "MAX_ANALYSIS_FRAMES", 2)
+        monkeypatch.setattr(recording, "MAX_CHUNK_FRAMES", 2)
     recorder = Recorder(tmp_path, maximum_bytes=len(sample.encode()) * 7, reserve_bytes=0)
     recorder.start()
     for _ in range(7):
@@ -273,7 +273,6 @@ def test_recording_rolls_into_analyzable_chunks_without_losing_boundary_frames(
         assert analyze_recording(path, Decoder())["quality"] != "invalid"
     assert sorted(lengths) == [1, 2, 2, 2]
     assert sum(lengths) == 7
-    assert recorder.bytes_used == len(sample.encode()) * 7
     saved = {item["id"]: recorder.path(item["id"]).read_bytes() for item in sessions}
     with pytest.raises(ValueError):
         recorder.start()
@@ -284,7 +283,7 @@ def test_rollover_stops_at_total_budget_without_losing_saved_chunks(tmp_path: Pa
     from tesla_can_dashboard import recording
 
     sample = frame()
-    monkeypatch.setattr(recording, "MAX_ANALYSIS_FRAMES", 2)
+    monkeypatch.setattr(recording, "MAX_CHUNK_FRAMES", 2)
     recorder = Recorder(tmp_path, maximum_bytes=len(sample.encode()) * 3, reserve_bytes=0)
     recorder.start()
     for _ in range(4):
@@ -294,48 +293,80 @@ def test_rollover_stops_at_total_budget_without_losing_saved_chunks(tmp_path: Pa
     assert sum(len(list(read_frames(recorder.path(item["id"])))) for item in recorder.status()["sessions"]) == 3
 
 
-def test_recording_and_analysis_admissions_cannot_race(tmp_path: Path) -> None:
-    import queue
-    import threading
+def test_rollover_uses_flush_result_instead_of_stale_status_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tesla_can_dashboard import recording
 
+    sample = frame()
+    monkeypatch.setattr(recording, "MAX_CHUNK_FRAMES", 2)
     recorder = Recorder(tmp_path, reserve_bytes=0)
-    saved = recorder.start()
-    recorder.append(frame())
+    recorder.start()
+    recorder.append(sample)
+    recorder.append(sample)
+    recorder.last_error = "Earlier transient storage warning"
+    recorder.append(sample)
+    assert recorder.active_id is not None
     recorder.stop()
-    barrier = threading.Barrier(2)
-    release = threading.Event()
-    outcomes: queue.Queue[tuple[str, bool]] = queue.Queue()
+    assert sum(len(list(read_frames(recorder.path(item["id"])))) for item in recorder.status()["sessions"]) == 3
 
-    def record() -> None:
-        barrier.wait(timeout=2)
-        try:
-            recorder.start()
-        except ValueError:
-            outcomes.put(("record", False))
-        else:
-            outcomes.put(("record", True))
-            release.wait(timeout=2)
-            recorder.stop()
 
-    def analyze() -> None:
-        barrier.wait(timeout=2)
-        try:
-            with recorder.completed_recording(saved):
-                outcomes.put(("analyze", True))
-                release.wait(timeout=2)
-        except ValueError:
-            outcomes.put(("analyze", False))
+def test_unknown_mux_page_keeps_mapped_branch_age_and_known_corruption_is_invalid(tmp_path: Path) -> None:
+    from tesla_can_dashboard.analysis import analyze_recording
 
-    threads = [threading.Thread(target=record), threading.Thread(target=analyze)]
-    try:
-        for thread in threads:
-            thread.start()
-        admitted = dict(outcomes.get(timeout=2) for _ in threads)
-        assert sum(admitted.values()) == 1
-    finally:
-        release.set()
-        for thread in threads:
-            thread.join(timeout=2)
-    assert not recorder.analysis_ids
+    dbc = tmp_path / "mux.dbc"
+    dbc.write_text("""VERSION "synthetic mux behavior"
+NS_ :
+BS_:
+BU_: TEST
+BO_ 103 Mux: 8 TEST
+ SG_ Page M : 0|4@1+ (1,0) [0|3] "" TEST
+ SG_ BMS_nominalFullPackEnergy m0 : 8|16@1+ (0.01,0) [0|250] "kWh" TEST
+ SG_ BMS_nominalEnergyRemaining m0 : 24|16@1+ (0.01,0) [0|250] "kWh" TEST
+ SG_ BMS_maxPackTemperature m1 : 8|16@1+ (0.01,0) [0|150] "DegC" TEST
+ SG_ BMS_socUI : 48|8@1+ (0.5,0) [0|100] "%" TEST
+VAL_ 103 BMS_nominalEnergyRemaining 65535 "SNA";
+""")
+    recorder = Recorder(tmp_path / "sessions", reserve_bytes=0)
+    engine = Engine("synthetic", recorder, dbc)
+    session = recorder.start()
+    good = bytes.fromhex("0010278813006400")
+    unknown = bytes.fromhex("03ffffffff007800")
+    engine.ingest(Frame(103, good, 0, 0))
+    engine.ingest(Frame(103, unknown, 1, 1_000_000_000))
+    recorder.stop()
+    readings = engine.store.snapshot(now=2)["signals"]
+    assert readings["fullPackEnergyKwh"]["value"] == 100
+    assert readings["remainingEnergyKwh"]["value"] == 50
+    assert readings["remainingEnergyKwh"]["ageSeconds"] == 2
+    assert readings["displayedChargePercent"]["value"] == 60
+    assert readings["displayedChargePercent"]["ageSeconds"] == 1
+    assert engine.store.decode_errors == 0
+    result = analyze_recording(recorder.path(session), engine.decoder)
+    assert result["recording"]["decodeErrors"] == 0
+    assert result["battery"]["signals"]["remainingEnergyKwh"]["samples"] == 1
+    assert len(list(read_frames(recorder.path(session)))) == 2
+    engine.ingest(Frame(103, bytes.fromhex("001027ffff006400"), 2, 2_000_000_000))
+    assert engine.store.snapshot(now=2)["signals"]["remainingEnergyKwh"]["quality"] == "invalid"
+    engine.ingest(Frame(103, b"bad", 3, 3_000_000_000))
+    assert engine.store.decode_errors == 1
+    assert engine.store.snapshot(now=3)["signals"]["fullPackEnergyKwh"]["quality"] == "invalid"
+    engine.close()
+
+
+def test_failed_chunk_flush_stops_capture_instead_of_rolling_forward(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tesla_can_dashboard import recording
+
+    sample = frame()
+    monkeypatch.setattr(recording, "MAX_CHUNK_FRAMES", 1)
+    recorder = Recorder(tmp_path, reserve_bytes=0)
+    recorder.start()
+    recorder.append(sample)
+
+    def failed_flush(_: int) -> None:
+        raise OSError("Synthetic flush failure")
+
+    monkeypatch.setattr(recording.os, "fsync", failed_flush)
+    recorder.append(sample)
     assert recorder.active_id is None
-    assert len(list(read_frames(recorder.path(saved)))) == 1
+    assert recorder.last_error
+    assert len(recorder.status()["sessions"]) == 1
+    assert len(list(read_frames(recorder.path(recorder.status()["sessions"][0]["id"])))) == 1

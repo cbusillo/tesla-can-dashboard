@@ -1,7 +1,9 @@
 import math
 import re
 import struct
+from copy import copy
 from pathlib import Path
+from typing import NamedTuple
 
 import cantools
 from cantools.database.can import Message, Signal
@@ -37,6 +39,12 @@ CELL_NAME = re.compile(r"BMS_brickVoltage(\d+)$")
 INVALID_CHOICES = {"SNA", "INVALID", "NOT_AVAILABLE"}
 
 
+class MultiplexerHeader(NamedTuple):
+    message: Message
+    selector: str
+    supported: frozenset[int]
+
+
 class Decoder:
     def __init__(self, dbc: Path | None = None) -> None:
         database = None
@@ -54,6 +62,11 @@ class Decoder:
             }
         )
         self.frame_ids = set(self.messages) if self.database else {0x132, 0x292}
+        self.multiplexer_headers: dict[int, MultiplexerHeader] = {}
+        for identifier, message in self.messages.items():
+            header = self._multiplexer_header(message)
+            if header is not None:
+                self.multiplexer_headers[identifier] = header
 
     def signal_keys(self, identifier: int) -> set[str]:
         if self.database is None:
@@ -75,7 +88,7 @@ class Decoder:
         message = self.messages[identifier]
         if len(data) != message.length:
             raise ValueError("Wrong CAN frame length")
-        decoded = message.decode(data, decode_choices=False, allow_truncated=False)
+        decoded = self._decode_message(message, data)
         values = {}
         cells = {}
         for signal in message.signals:
@@ -105,6 +118,36 @@ class Decoder:
             factor = UNIT_FACTORS["voltageV"].get(signal.unit)
             cells[index] = number * factor if status == 2 and factor is not None and number is not None else None
         return values, cells
+
+    @staticmethod
+    def _multiplexer_header(message: Message) -> MultiplexerHeader | None:
+        selectors = [signal for signal in message.signals if signal.is_multiplexer]
+        if len(selectors) != 1 or selectors[0].multiplexer_signal is not None:
+            return None
+        selector = selectors[0]
+        roots = [copy(signal) for signal in message.signals if signal.multiplexer_signal is None]
+        for signal in roots:
+            signal.is_multiplexer = False
+        supported = frozenset(identifier for signal in message.signals for identifier in signal.multiplexer_ids or []) | frozenset(
+            (selector.choices or {}).keys()
+        )
+        header = Message(
+            message.frame_id, message.name, message.length, roots, is_extended_frame=message.is_extended_frame, strict=False
+        )
+        return MultiplexerHeader(header, selector.name, supported)
+
+    def _decode_message(self, message: Message, data: bytes) -> dict:
+        try:
+            return message.decode(data, decode_choices=False, allow_truncated=False)
+        except cantools.database.errors.DecodeError:
+            header = self.multiplexer_headers.get(message.frame_id)
+            if header is None:
+                raise
+            roots = header.message.decode(data, decode_choices=False, allow_truncated=False)
+            selected = roots[header.selector]
+            if not isinstance(selected, int) or selected in header.supported:
+                raise
+            return roots
 
     @staticmethod
     def _available_number(signal: Signal, value: object) -> float | None:

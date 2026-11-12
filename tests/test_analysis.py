@@ -193,3 +193,12 @@ def test_nonzero_standstill_is_not_silently_calibrated_into_standing_runs(tmp_pa
     assert measurement(result, "0-100-kmh")["runs"] == []
     assert measurement(result, "quarter-mile")["runs"] == []
     assert measurement(result, "80-120-kmh")["runs"]
+
+
+def test_oversized_interior_frame_invalidates_earlier_plausible_runs(tmp_path: Path, telemetry_dbc: Path) -> None:
+    path = tmp_path / "corrupt.jsonl"
+    frames = b"".join(drive(i / 10, max(0, i - 10)).encode() for i in range(120))
+    path.write_bytes(frames + b"x" * 2050 + b"\n" + drive(15, 0).encode())
+    result = analyze_recording(path, Decoder(telemetry_dbc))
+    assert result["quality"] == "invalid"
+    assert measurement(result, "0-100-kmh")["runs"] == []

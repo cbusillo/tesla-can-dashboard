@@ -14,6 +14,7 @@ from typing import cast
 
 MAX_ANALYSIS_BYTES = 64 * 1024 * 1024
 MAX_ANALYSIS_FRAMES = 500_000
+MAX_CHUNK_FRAMES = MAX_ANALYSIS_FRAMES // 5
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
 
 
@@ -40,10 +41,10 @@ def read_frames(path: Path, *, require_complete: bool = False, maximum_bytes: in
             bytes_read += len(line)
             if maximum_bytes is not None and bytes_read > maximum_bytes:
                 raise ValueError("Recording exceeds the read byte limit")
-            if require_complete and not line.endswith(b"\n"):
-                raise InterruptedTailError("Completed recording contains an interrupted frame")
             if len(line) > 2048:
                 raise ValueError("Recording contains an oversized frame")
+            if require_complete and not line.endswith(b"\n"):
+                raise InterruptedTailError("Completed recording contains an interrupted frame")
             try:
                 value = json.loads(line)
             except json.JSONDecodeError:
@@ -137,13 +138,8 @@ class Recorder:
                     self.last_error = "Recording stopped at its storage limit; saved sessions were kept"
                     self.stop()
                     return
-                if len(encoded) > MAX_ANALYSIS_BYTES:
-                    self.last_error = "Recording stopped because a frame exceeds the chunk limit"
-                    self.stop()
-                    return
-                if self.session_bytes + len(encoded) > MAX_ANALYSIS_BYTES or self.session_frames >= MAX_ANALYSIS_FRAMES:
-                    self.stop()
-                    if self.last_error:
+                if self.session_bytes + len(encoded) > MAX_ANALYSIS_BYTES or self.session_frames >= MAX_CHUNK_FRAMES:
+                    if not self.stop():
                         return
                     self.start()
                 written = self.stream.write(encoded)
@@ -156,17 +152,20 @@ class Recorder:
                 self.last_error = str(error) if isinstance(error, ValueError) else "Recording stopped because storage is unavailable"
                 self.stop()
 
-    def stop(self) -> None:
+    def stop(self) -> bool:
+        flushed = True
         with self.lock:
             if self.stream is not None:
                 try:
                     os.fsync(self.stream.fileno())
                 except OSError:
+                    flushed = False
                     self.last_error = "Recording stopped; its final write could not be confirmed"
                 finally:
                     self.stream.close()
             self.stream = None
             self.active_id = None
+        return flushed
 
     def path(self, session_id: str) -> Path:
         if not SESSION_ID.fullmatch(session_id):
