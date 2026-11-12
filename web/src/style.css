@@ -651,3 +651,13 @@ ion-list-header {
 .overview .history-panel {
   padding-top: 4px;
 }
+.cell-grid button.stale {
+  border: 1px dashed var(--muted);
+}
+.cell-grid button.invalid {
+  border: 1px solid var(--muted);
+  text-decoration: line-through;
+}
+.cell-grid button.unavailable {
+  opacity: 0.5;
+}

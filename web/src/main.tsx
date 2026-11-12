@@ -495,7 +495,8 @@ function App() {
               <div>
                 <h2>Cell voltage</h2>
                 <p>
-                  {fresh.length} / {cells.length || "—"} groups fresh
+                  {data?.freshCellCount ?? 0} / {cells.length || "—"} groups
+                  fresh
                 </p>
               </div>
               <div class="cells-summary">
@@ -532,8 +533,9 @@ function App() {
                 {cells.map((c) => (
                   <button
                     key={c.index}
-                    class={c.index === selectedCell ? "selected" : ""}
-                    aria-label={`Group ${c.index}`}
+                    class={`${c.index === selectedCell ? "selected " : ""}${c.quality}`}
+                    aria-label={`Group ${c.index}: ${display(c, "metric", 4)}, ${readingStatus(c) || "Fresh"}`}
+                    title={`Group ${c.index}: ${display(c, "metric", 4)}, ${readingStatus(c) || "Fresh"}`}
                     aria-pressed={c.index === selectedCell}
                     onClick={() => setSelectedCell(c.index)}
                   >

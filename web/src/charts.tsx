@@ -20,6 +20,7 @@ import {
   display,
   displayUnit,
   readingStatus,
+  usableReading,
   type DialRange,
   type Reading,
 } from "./types";
@@ -107,7 +108,7 @@ export function Chart({
 }
 export function Dial({
   reading,
-  unit,
+  unit: fallbackUnit,
   range,
   units,
   dark,
@@ -120,12 +121,9 @@ export function Dial({
   dark: boolean;
   label: string;
 }) {
-  const usable =
-    reading &&
-    reading.value !== null &&
-    Number.isFinite(reading.value) &&
-    (reading?.quality === "fresh" || reading?.quality === "stale");
-  const value = usable ? convert(reading.value!, unit, units) : null,
+  const usable = usableReading(reading);
+  const unit = reading?.unit ?? fallbackUnit;
+  const value = usable ? convert(reading.value, unit, units) : null,
     minimum = convert(range.minimum, unit, units),
     maximum = convert(range.maximum, unit, units);
   const primary =

@@ -78,18 +78,22 @@ export function displayUnit(unit: string, units: string) {
         : unit
     : unit;
 }
+export function usableReading(
+  reading: Reading | undefined,
+): reading is Reading & { value: number } {
+  return (
+    reading !== undefined &&
+    reading.value !== null &&
+    Number.isFinite(reading.value) &&
+    (reading.quality === "fresh" || reading.quality === "stale")
+  );
+}
 export function display(
   reading: Reading | undefined,
   units: string,
   decimals?: number,
 ) {
-  if (
-    !reading ||
-    reading.value === null ||
-    !Number.isFinite(reading.value) ||
-    (reading.quality !== "fresh" && reading.quality !== "stale")
-  )
-    return "—";
+  if (!usableReading(reading)) return "—";
   return (
     convert(reading.value, reading.unit, units).toFixed(
       decimals ?? (reading.unit === "V" ? 2 : 1),

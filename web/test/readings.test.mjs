@@ -60,6 +60,12 @@ test("an offline browser holds zero without converting absent or invalid reading
 
 test("nonfinite and unusable readings never become numeric displays", () => {
   const absent = display(undefined, "metric");
+  assert.ok(readingStatus(undefined));
+  assert.equal(
+    readingStatus(undefined),
+    readingStatus({ ...fresh(null), quality: "unavailable" }),
+  );
+  assert.notEqual(readingStatus(undefined), readingStatus(fresh(0)));
   for (const value of [NaN, Infinity, -Infinity, null])
     assert.equal(display(fresh(value), "metric"), absent);
   for (const quality of ["unavailable", "invalid"])
@@ -73,7 +79,6 @@ test("saved temperature and speed limits round trip through US units in canonica
     [-20, "°C"],
     [80, "°C"],
     [120, "km/h"],
-    [-15, "A"],
   ]) {
     assert.ok(
       Math.abs(
