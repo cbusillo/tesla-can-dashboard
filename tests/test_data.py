@@ -292,3 +292,50 @@ def test_rollover_stops_at_total_budget_without_losing_saved_chunks(tmp_path: Pa
     assert recorder.active_id is None
     assert recorder.last_error
     assert sum(len(list(read_frames(recorder.path(item["id"])))) for item in recorder.status()["sessions"]) == 3
+
+
+def test_recording_and_analysis_admissions_cannot_race(tmp_path: Path) -> None:
+    import queue
+    import threading
+
+    recorder = Recorder(tmp_path, reserve_bytes=0)
+    saved = recorder.start()
+    recorder.append(frame())
+    recorder.stop()
+    barrier = threading.Barrier(2)
+    release = threading.Event()
+    outcomes: queue.Queue[tuple[str, bool]] = queue.Queue()
+
+    def record() -> None:
+        barrier.wait(timeout=2)
+        try:
+            recorder.start()
+        except ValueError:
+            outcomes.put(("record", False))
+        else:
+            outcomes.put(("record", True))
+            release.wait(timeout=2)
+            recorder.stop()
+
+    def analyze() -> None:
+        barrier.wait(timeout=2)
+        try:
+            with recorder.completed_recording(saved):
+                outcomes.put(("analyze", True))
+                release.wait(timeout=2)
+        except ValueError:
+            outcomes.put(("analyze", False))
+
+    threads = [threading.Thread(target=record), threading.Thread(target=analyze)]
+    try:
+        for thread in threads:
+            thread.start()
+        admitted = dict(outcomes.get(timeout=2) for _ in threads)
+        assert sum(admitted.values()) == 1
+    finally:
+        release.set()
+        for thread in threads:
+            thread.join(timeout=2)
+    assert not recorder.analysis_ids
+    assert recorder.active_id is None
+    assert len(list(read_frames(recorder.path(saved)))) == 1

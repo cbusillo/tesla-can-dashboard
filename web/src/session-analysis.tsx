@@ -103,16 +103,25 @@ function MeasurementCard({ measurement }: { measurement: Measurement }) {
           {measurement.runs.map((run, index) => (
             <li key={`${run.startSeconds}-${index}`}>
               <strong>{run.durationSeconds.toFixed(1)} s</strong>
-              <span>
-                From {run.startSeconds.toFixed(1)} s · samples up to{" "}
-                {run.sampleResolutionSeconds.toFixed(2)} s apart
-              </span>
+              <details>
+                <summary>Details</summary>
+                <span>
+                  From {run.startSeconds.toFixed(1)} s · samples up to{" "}
+                  {run.sampleResolutionSeconds.toFixed(2)} s apart
+                </span>
+              </details>
             </li>
           ))}
         </ol>
       )}
-      {measurement.reasons.length > 0 && (
-        <small>{explain(measurement.reasons)}</small>
+      {measurement.runs.length === 0 && measurement.reasons.length > 0 && (
+        <small>
+          {explain([
+            measurement.reasons.find(
+              (reason) => reason !== "incomplete_interval",
+            ) || "incomplete_interval",
+          ])}
+        </small>
       )}
     </article>
   );
@@ -201,11 +210,9 @@ export function SessionAnalysis({
         `/api/recordings/${encodeURIComponent(selected)}/analysis`,
         { signal: request.signal },
       );
-      const data = await response
-        .json()
-        .catch(() => ({
-          detail: "Session analysis is unavailable. Try again.",
-        }));
+      const data = await response.json().catch(() => ({
+        detail: "Session analysis is unavailable. Try again.",
+      }));
       if (!response.ok)
         throw new Error(data.detail || "Session analysis failed");
       if (!request.signal.aborted) setResult(data as Analysis);
@@ -248,7 +255,7 @@ export function SessionAnalysis({
         </label>
         <button
           type="button"
-          disabled={!exists || busy}
+          disabled={!exists || busy || activeId !== null}
           onClick={() => void analyze()}
         >
           {busy ? "Analyzing…" : "Analyze"}
@@ -257,14 +264,21 @@ export function SessionAnalysis({
       {available.length === 0 && (
         <p>Stop and save a recording to analyze it.</p>
       )}
+      {activeId !== null && <p>Stop recording to analyze saved sessions.</p>}
       {error && <p role="alert">{error}</p>}
       {result && (
         <div aria-live="polite">
           <p>
             {result.recording.frames.toLocaleString()} frames ·{" "}
-            {observed(result.recording.durationSeconds, "s")} · {result.quality}
+            {observed(result.recording.durationSeconds, "s")} · Estimates · No
+            rollout
+            {result.quality === "partial"
+              ? " · Partial"
+              : result.quality === "invalid"
+                ? " · Invalid"
+                : ""}
           </p>
-          {result.reasons.length > 0 && <p>{explain(result.reasons)}</p>}
+          {result.quality === "invalid" && <p>{explain(result.reasons)}</p>}
           {result.quality !== "invalid" && (
             <>
               <details className="session-conventions">
@@ -275,6 +289,22 @@ export function SessionAnalysis({
                   {result.timing.maximumSpeedGapSeconds} s apart. Durations use
                   userspace acquisition timestamps. Sensor accuracy is not
                   established by this analysis.
+                </p>
+                {result.reasons.length > 0 && <p>{explain(result.reasons)}</p>}
+                <p>
+                  Curves show sampled observations by elapsed seconds. Points
+                  are not joined across unobserved time.
+                </p>
+                <p>
+                  Decoded with the current profile; the original profile is
+                  unknown. Current sign is unqualified. These observations do
+                  not establish battery health, age, range or charging ETA.
+                </p>
+                <p>
+                  AC input energy covers{" "}
+                  {result.battery.charging.coveredSeconds.toFixed(1)} s of
+                  adjacent samples. It is not pack energy or DC fast-charge
+                  energy.
                 </p>
               </details>
               {result.performance.groups.map((group) => (
@@ -296,14 +326,9 @@ export function SessionAnalysis({
               ))}
               <h3>Battery and charging observations</h3>
               <p>
-                Curves show sampled observations on an elapsed-seconds axis.
-                Points are not joined across unobserved time.
-              </p>
-              <p>
-                {observed(result.battery.charging.observedEnergyKwh, "kWh")}{" "}
-                across {result.battery.charging.coveredSeconds.toFixed(1)} s of
-                covered charger-line samples ({result.battery.charging.quality}
-                ). This is not pack energy or DC fast-charge energy.
+                AC input energy ·{" "}
+                {observed(result.battery.charging.observedEnergyKwh, "kWh")} ·{" "}
+                {result.battery.charging.quality}
               </p>
               <dl className="session-observations">
                 {Object.entries(result.battery.signals).map(([key, signal]) => (
@@ -335,12 +360,6 @@ export function SessionAnalysis({
                   </div>
                 ))}
               </dl>
-              <p>
-                Decoded with the current profile. The recording does not
-                identify its original profile. Current sign is unqualified;
-                these observations do not establish battery health, age, range
-                or charging ETA.
-              </p>
             </>
           )}
         </div>

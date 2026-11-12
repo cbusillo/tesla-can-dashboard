@@ -102,6 +102,8 @@ class Recorder:
 
     def start(self) -> str:
         with self.lock:
+            if self.analysis_ids:
+                raise ValueError("Wait for session analysis before starting recording")
             if self.active_id:
                 return self.active_id
             self.directory.mkdir(parents=True, exist_ok=True)
@@ -177,8 +179,8 @@ class Recorder:
     @contextmanager
     def completed_recording(self, session_id: str) -> Iterator[Path]:
         with self.lock:
-            if session_id == self.active_id:
-                raise ValueError("Stop recording before analyzing this session")
+            if self.active_id is not None:
+                raise ValueError("Stop recording before analyzing saved sessions")
             path = self.path(session_id)
             before = path.stat()
             self.analysis_ids.add(session_id)

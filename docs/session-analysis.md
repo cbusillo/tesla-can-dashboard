@@ -89,8 +89,7 @@ server continue. Each successful service start creates a new recording;
 this is not automatic per-drive segmentation or an indefinite recording promise.
 The same Recorder rolls over before either analysis input limit is exceeded:
 64 MiB or 500,000 frames per JSONL chunk. The boundary frame goes into the new
-chunk exactly once. Older chunks remain immutable and analyzable during
-continued capture. All chunks share the existing total budget and free-space
+chunk exactly once. Older chunks remain immutable and analyzable after capture stops. All chunks share the existing total budget and free-space
 reserve. Reaching either safeguard stops capture and reports the error;
 there is no deletion, overwrite or automatic restart loop. Runs do not bridge
 chunk boundaries. Stop recording before analyzing the active chunk.
@@ -108,8 +107,11 @@ a nonzero value at rest; analysis never invents a calibration offset.
 The endpoint admits one analysis at a time, at most 64 MiB and 500,000 frames,
 50 runs per measurement and 240 curve points per signal. It streams the raw
 recording, writes no decoded copy or analysis cache, and releases the recorder
-lock before decoding. Active recordings are excluded; deletion is refused
-while analysis owns a recording. A changed file is rejected before returning.
+lock before decoding. Analysis is refused while any recording is active, and recording startup is
+refused while analysis owns a recording. The shared recorder lock makes these
+admissions atomic, avoiding analysis CPU contention during userspace acquisition.
+The live receiver continues. Use the existing Stop control, Analyze, then Record
+to resume capture. Deletion is refused while analysis owns a recording. A changed file is rejected before returning.
 
 HTTP errors: 404 for missing/invalid IDs, 409 for active/busy/changed recordings,
 413 for input bounds, and 503 for unavailable storage. A malformed recording

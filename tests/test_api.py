@@ -134,6 +134,10 @@ def test_analysis_excludes_active_recordings_and_ignores_browser_replay_clock(
         url = f"/api/recordings/{identifier}/analysis"
         assert client.get(url).status_code == 409
         client.post("/api/recordings/stop")
+        second = client.post("/api/recordings/start").json()["id"]
+        assert second != identifier
+        assert client.get(url).status_code == 409
+        client.post("/api/recordings/stop")
         response = client.get(url)
         assert response.status_code == 200
         result = response.json()
@@ -150,6 +154,11 @@ def test_analysis_excludes_active_recordings_and_ignores_browser_replay_clock(
             assert client.get(url).status_code == 409
         with engine.recorder.completed_recording(identifier):
             assert client.delete(f"/api/recordings/{identifier}").status_code == 409
+            assert client.post("/api/recordings/start").status_code == 409
+            before = engine.store.frames
+            engine.ingest(Frame(0x132, bytes(8), 100, 4_000_000_000))
+            assert engine.store.frames == before + 1
+            assert engine.recorder.active_id is None
 
 
 def test_analysis_rejects_oversized_input_and_does_not_return_changed_recording(
