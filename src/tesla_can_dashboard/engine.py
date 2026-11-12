@@ -9,6 +9,7 @@ from pathlib import Path
 
 import cantools
 
+from .analysis import analyze_recording
 from .decoder import Decoder
 from .recording import Frame, Recorder, read_frames
 from .signals import SignalStore
@@ -17,9 +18,18 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Engine:
-    def __init__(self, interface: str | None, recorder: Recorder, dbc: Path | None = None, cell_count: int = 96) -> None:
+    def __init__(
+        self,
+        interface: str | None,
+        recorder: Recorder,
+        dbc: Path | None = None,
+        cell_count: int = 96,
+        *,
+        auto_record: bool = False,
+    ) -> None:
         self.interface = interface
         self.decoder = Decoder(dbc)
+        self.auto_record = auto_record
         self.recorder = recorder
         self.store = SignalStore(cell_count)
         self.stop_event = threading.Event()
@@ -34,6 +44,7 @@ class Engine:
         self.replay_id: str | None = None
         self.replay_error: str | None = None
         self.control_lock = threading.RLock()
+        self.analysis_lock = threading.Lock()
         self.revision = str(time.time_ns())
         self.started_at = time.monotonic()
         self.demo = self._load_demo() if interface is None else None
@@ -46,6 +57,17 @@ class Engine:
 
     def start(self) -> None:
         if self.interface:
+            if self.auto_record:
+                try:
+                    self.recorder.start()
+                except (OSError, ValueError) as error:
+                    with self.recorder.lock:
+                        self.recorder.last_error = (
+                            str(error)
+                            if isinstance(error, ValueError)
+                            else "Automatic recording could not start: storage is unavailable"
+                        )
+                    LOGGER.warning("Automatic recording could not start; the live receiver will continue")
             thread = threading.Thread(target=self._receive, daemon=True)
             self.thread = thread
             thread.start()
@@ -68,6 +90,7 @@ class Engine:
         except (ValueError, cantools.database.errors.DecodeError):
             with self.store.lock:
                 self.store.decode_errors += 1
+            self.store.invalidate(self.decoder.signal_keys(frame.identifier), frame.timestamp, now=frame.monotonic_ns / 1e9)
             return
         self.store.update(values, cells, frame.timestamp, now=frame.monotonic_ns / 1e9)
 
@@ -134,6 +157,17 @@ class Engine:
         snapshot["recording"] = self.recorder.status()
         return snapshot
 
+    def analyze_session(self, session_id: str) -> dict:
+        if not self.analysis_lock.acquire(blocking=False):
+            raise ValueError("Session analysis is busy; try again when it finishes")
+        try:
+            with self.recorder.completed_recording(session_id) as path:
+                result = analyze_recording(path, self.decoder)
+                result["sessionId"] = session_id
+                return result
+        finally:
+            self.analysis_lock.release()
+
     def start_replay(self, session_id: str, rate: float = 1) -> None:
         with self.control_lock:
             self._start_replay(session_id, rate)
@@ -176,6 +210,7 @@ class Engine:
                 except (ValueError, cantools.database.errors.DecodeError):
                     with store.lock:
                         store.decode_errors += 1
+                    store.invalidate(self.decoder.signal_keys(frame.identifier), frame.timestamp, now=self.replay_time)
                     continue
                 store.update(values, cells, frame.timestamp, now=self.replay_time)
             self.replay_state = "finished"

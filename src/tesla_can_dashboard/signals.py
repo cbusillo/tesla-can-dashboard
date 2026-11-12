@@ -24,11 +24,17 @@ SIGNALS = (
     SignalDefinition("remainingEnergyKwh", "Remaining energy", "kWh", "battery", 0, 250, 30),
     SignalDefinition("minimumTemperatureC", "Minimum pack temperature", "°C", "battery", -60, 150, 30),
     SignalDefinition("maximumTemperatureC", "Maximum pack temperature", "°C", "battery", -60, 150, 30),
-    SignalDefinition("chargingPowerKw", "Charging power", "kW", "charging", 0, 1000),
+    SignalDefinition("chargingPowerKw", "Charger line power", "kW", "charging", 0, 1000),
     SignalDefinition("chargeLimitPercent", "Charge limit", "%", "charging", 0, 100, 30),
+    SignalDefinition("driveGear", "Gear (1 P, 2 R, 3 N, 4 D)", "", "drive", 1, 4, 0.5),
     SignalDefinition("speedKmh", "Speed", "km/h", "drive", 0, 450),
 )
 CATALOG = {definition.key: definition for definition in SIGNALS}
+
+
+def is_valid_signal(key: str, value: float | None) -> bool:
+    definition = CATALOG[key]
+    return value is not None and math.isfinite(value) and definition.minimum <= value <= definition.maximum
 
 
 @dataclass
@@ -69,7 +75,9 @@ class SignalStore:
         if not series.history or now - series.history[-1][0] >= 0.25:
             series.history.append((now, timestamp, value))
 
-    def update(self, values: dict[str, float], cells: dict[int, float | None], timestamp: float, now: float | None = None) -> None:
+    def update(
+        self, values: dict[str, float | None], cells: dict[int, float | None], timestamp: float, now: float | None = None
+    ) -> None:
         now = time.monotonic() if now is None else now
         with self.lock:
             self.frames += 1
@@ -78,11 +86,16 @@ class SignalStore:
             for key, value in values.items():
                 if key not in CATALOG:
                     continue
-                definition = CATALOG[key]
-                self._add(self.series[key], value, definition.minimum <= value <= definition.maximum, timestamp, now)
+                self._add(self.series[key], value, is_valid_signal(key, value), timestamp, now)
             for index, value in cells.items():
                 if index in self.cells:
                     self._add(self.cells[index], value, value is not None and 0 < value < 6, timestamp, now)
+
+    def invalidate(self, keys: set[str], timestamp: float, now: float) -> None:
+        with self.lock:
+            for key in keys:
+                if key in self.series:
+                    self._add(self.series[key], None, False, timestamp, now)
 
     @staticmethod
     def _reading(series: SignalSeries, stale_after: float, now: float, unit: str, include_history: bool = True) -> dict:

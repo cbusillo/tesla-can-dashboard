@@ -66,13 +66,3 @@ export function Page({
     </ion-tab>
   );
 }
-
-// Replace this boundary with the real view when its API and speed source are qualified.
-export function Performance() {
-  return (
-    <section class="unavailable-feature" aria-labelledby="performance-title">
-      <h2 id="performance-title">Performance</h2>
-      <p>Unavailable · timing data is not connected.</p>
-    </section>
-  );
-}

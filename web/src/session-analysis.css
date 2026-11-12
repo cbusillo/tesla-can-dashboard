@@ -1,0 +1,125 @@
+.session-analysis {
+  padding: 16px 24px 28px;
+  max-width: 1120px;
+  margin: auto;
+  color: var(--ink);
+}
+.session-analysis h2 {
+  font-size: 15px;
+  font-weight: 500;
+}
+.session-analysis h3 {
+  font-size: 14px;
+  font-weight: 550;
+  margin: 22px 0 12px;
+}
+.session-analysis h4 {
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+.session-analysis p,
+.session-analysis small {
+  line-height: 1.5;
+}
+.session-analysis p {
+  margin: 12px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.session-analysis small,
+.session-analysis li span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.session-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin: 16px 0;
+}
+.session-picker label {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 12rem;
+  font-size: 13px;
+  color: var(--muted);
+}
+.session-picker select,
+.session-picker button {
+  padding: 12px;
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  min-height: 48px;
+}
+.session-picker select {
+  width: 100%;
+  min-width: 0;
+}
+.session-picker button {
+  color: var(--accent);
+  font-size: 14px;
+}
+.session-conventions {
+  font-size: 13px;
+  color: var(--muted);
+}
+.session-conventions summary {
+  padding: 12px 0;
+  cursor: pointer;
+  color: var(--accent);
+}
+.session-measurements {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 16px;
+}
+.session-measurement {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+.session-measurement ol {
+  padding-left: 20px;
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0;
+}
+.session-measurement li {
+  padding-bottom: 12px;
+}
+.session-measurement strong {
+  font-size: 28px;
+  font-weight: 450;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+.session-observations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 24px;
+  margin: 20px 0;
+}
+.session-observations dt {
+  font-size: 13px;
+  color: var(--muted);
+}
+.session-observations dd {
+  margin: 8px 0;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.session-analysis [role="alert"] {
+  color: var(--ion-color-danger);
+}
+@media (max-width: 500px) {
+  .session-analysis {
+    padding: 16px;
+  }
+}
