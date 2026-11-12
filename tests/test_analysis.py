@@ -135,7 +135,7 @@ def test_curves_runs_and_input_frames_are_bounded(tmp_path: Path, telemetry_dbc:
     result = analyze(tmp_path, telemetry_dbc, frames)
     assert len(measurement(result, "0-100-kmh")["runs"]) == 2
     assert result["performance"]["omittedRuns"] > 0
-    monkeypatch.setattr(analysis, "MAX_ANALYSIS_FRAMES", 5)
+    monkeypatch.setattr("tesla_can_dashboard.analysis.MAX_ANALYSIS_FRAMES", 5)
     with pytest.raises(analysis.AnalysisLimitError):
         analyze(tmp_path, telemetry_dbc, frames)
 
@@ -184,3 +184,11 @@ def test_corrupt_recording_cannot_expose_valid_looking_battery_prefix(tmp_path: 
     assert signal["quality"] == "invalid"
     assert signal["first"] is None and not signal["curve"]
     assert result["battery"]["charging"]["observedEnergyKwh"] is None
+
+
+def test_nonzero_standstill_is_not_silently_calibrated_into_standing_runs(tmp_path: Path, telemetry_dbc: Path) -> None:
+    frames = [drive(i / 10, 0.96 if i < 10 else i - 9) for i in range(240)]
+    result = analyze(tmp_path, telemetry_dbc, frames)
+    assert measurement(result, "0-100-kmh")["runs"] == []
+    assert measurement(result, "quarter-mile")["runs"] == []
+    assert measurement(result, "80-120-kmh")["runs"]

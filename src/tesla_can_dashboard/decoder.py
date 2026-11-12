@@ -19,7 +19,7 @@ SIGNAL_NAMES = {
     "PCS_chgInputPower": "chargingPowerKw",
     "UI_chargeTerminationPct": "chargeLimitPercent",
 }
-UNIT_FACTORS = {
+UNIT_FACTORS: dict[str, dict[str | None, float]] = {
     "voltageV": {"V": 1, "mV": 0.001},
     "currentA": {"A": 1, "mA": 0.001},
     "displayedChargePercent": {"%": 1},
@@ -82,42 +82,43 @@ class Decoder:
             if signal.name not in decoded:
                 continue
             value = decoded[signal.name]
+            number = self._available_number(signal, value)
             if signal.name in SIGNAL_NAMES:
                 key = SIGNAL_NAMES[signal.name]
                 factor = UNIT_FACTORS[key].get(signal.unit)
                 if factor is None:
                     continue
                 if key == "driveGear":
-                    raw = int(signal.conversion.scaled_to_raw(value))
+                    if number is None:
+                        values[key] = None
+                        continue
+                    raw = int(signal.conversion.scaled_to_raw(number))
                     choice = str((signal.choices or {}).get(raw, ""))
                     values[key] = GEARS.get(choice)
                     continue
-                valid = self._number_is_available(signal, value)
-                values[key] = float(value) * factor if valid else None
+                values[key] = number * factor if number is not None else None
             match = CELL_NAME.fullmatch(signal.name)
             if match is None:
                 continue
             index = int(match.group(1))
             status = decoded.get(f"BMS_brickVoltageStatus{index}")
-            factor = {"V": 1, "mV": 0.001}.get(signal.unit)
-            cells[index] = (
-                float(value) * factor if status == 2 and factor is not None and self._number_is_available(signal, value) else None
-            )
+            factor = UNIT_FACTORS["voltageV"].get(signal.unit)
+            cells[index] = number * factor if status == 2 and factor is not None and number is not None else None
         return values, cells
 
     @staticmethod
-    def _number_is_available(signal: Signal, value: object) -> bool:
+    def _available_number(signal: Signal, value: object) -> float | None:
         if not isinstance(value, (int, float)) or not math.isfinite(value):
-            return False
+            return None
         if signal.minimum is not None and signal.maximum is not None and signal.minimum < signal.maximum:
             if not signal.minimum <= value <= signal.maximum:
-                return False
+                return None
         choices = signal.choices
         if not choices:
-            return True
+            return float(value)
         raw = int(signal.conversion.scaled_to_raw(value))
         choice = str(choices.get(raw, "")).upper()
-        return choice not in INVALID_CHOICES and not choice.endswith(("_SNA", "_INVALID"))
+        return None if choice in INVALID_CHOICES or choice.endswith(("_SNA", "_INVALID")) else float(value)
 
     @staticmethod
     def _basic(identifier: int, data: bytes) -> dict[str, float | None]:

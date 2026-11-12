@@ -155,15 +155,12 @@ def test_analysis_excludes_active_recordings_and_ignores_browser_replay_clock(
 def test_analysis_rejects_oversized_input_and_does_not_return_changed_recording(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from tesla_can_dashboard import analysis
-    from tesla_can_dashboard import engine as engine_module
-
     engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
     identifier = engine.recorder.start()
     engine.recorder.append(Frame(0x132, bytes(8), 0, 1))
     engine.recorder.stop()
     with TestClient(create_app(engine, tmp_path)) as client:
-        monkeypatch.setattr(analysis, "MAX_ANALYSIS_BYTES", 1)
+        monkeypatch.setattr("tesla_can_dashboard.analysis.MAX_ANALYSIS_BYTES", 1)
         assert client.get(f"/api/recordings/{identifier}/analysis").status_code == 413
         monkeypatch.undo()
 
@@ -173,7 +170,7 @@ def test_analysis_rejects_oversized_input_and_does_not_return_changed_recording(
                 stream.write(Frame(0x132, bytes(8), 0, 2).encode())
             return result
 
-        monkeypatch.setattr(engine_module, "analyze_recording", mutate_during_analysis)
+        monkeypatch.setattr("tesla_can_dashboard.engine.analyze_recording", mutate_during_analysis)
         assert client.get(f"/api/recordings/{identifier}/analysis").status_code == 409
         assert not engine.recorder.analysis_ids
         assert not engine.analysis_lock.locked()
