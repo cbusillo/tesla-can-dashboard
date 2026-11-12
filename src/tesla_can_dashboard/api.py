@@ -14,7 +14,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .analysis import AnalysisLimitError
 from .engine import Engine
+from .recording import SESSION_ID
 from .signals import CATALOG
 
 
@@ -188,6 +190,21 @@ def create_app(
     @app.get("/api/recordings")
     def recordings() -> dict:
         return engine.recorder.status()
+
+    @app.get("/api/recordings/{session_id}/analysis")
+    def analyze_session(session_id: str) -> dict:
+        if not SESSION_ID.fullmatch(session_id):
+            raise HTTPException(404, "Recording not found")
+        try:
+            return engine.analyze_session(session_id)
+        except FileNotFoundError:
+            raise HTTPException(404, "Recording not found") from None
+        except AnalysisLimitError as error:
+            raise HTTPException(413, str(error)) from None
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except OSError:
+            raise HTTPException(503, "Recording storage is unavailable") from None
 
     @app.get("/api/recordings/{session_id}")
     def download_recording(session_id: str) -> FileResponse:

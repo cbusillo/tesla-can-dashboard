@@ -1,9 +1,12 @@
 import json
 import time
+from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tesla_can_dashboard.api import create_app
+from tesla_can_dashboard.decoder import Decoder
 from tesla_can_dashboard.engine import Engine
 from tesla_can_dashboard.recording import Frame, Recorder
 
@@ -116,3 +119,61 @@ def test_previous_layout_loads_without_replacing_instrument_choices(tmp_path) ->
         loaded = client.get("/api/layout").json()
         assert all(loaded[key] == value for key, value in legacy.items())
         assert "presentation" in loaded and "ranges" in loaded
+
+
+def test_analysis_excludes_active_recordings_and_ignores_browser_replay_clock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = Engine("can0", Recorder(tmp_path / "sessions", reserve_bytes=0))
+    monkeypatch.setattr(engine, "start", lambda: None)
+    with TestClient(create_app(engine, tmp_path)) as client:
+        identifier = client.post("/api/recordings/start").json()["id"]
+        engine.ingest(Frame(0x132, bytes.fromhex("8393faff00000000"), 200, 1_000_000_000))
+        engine.ingest(Frame(0x132, bytes.fromhex("8393faff00000000"), 100, 3_000_000_000))
+        url = f"/api/recordings/{identifier}/analysis"
+        assert client.get(url).status_code == 409
+        client.post("/api/recordings/stop")
+        response = client.get(url)
+        assert response.status_code == 200
+        result = response.json()
+        assert result["sessionId"] == identifier
+        assert result["recording"]["durationSeconds"] == 2
+        assert "missing_speed" in result["reasons"]
+        engine.replay_time = 1e20
+        engine.replay_rate = 4
+        engine.replay_clock = -1e20
+        assert client.get(url).json() == result
+        assert client.get("/api/recordings/bad/analysis").status_code == 404
+        assert client.get(f"/api/recordings/{'a' * 32}/analysis").status_code == 404
+        with engine.analysis_lock:
+            assert client.get(url).status_code == 409
+        with engine.recorder.completed_recording(identifier):
+            assert client.delete(f"/api/recordings/{identifier}").status_code == 409
+
+
+def test_analysis_rejects_oversized_input_and_does_not_return_changed_recording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tesla_can_dashboard import analysis
+    from tesla_can_dashboard import engine as engine_module
+
+    engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
+    identifier = engine.recorder.start()
+    engine.recorder.append(Frame(0x132, bytes(8), 0, 1))
+    engine.recorder.stop()
+    with TestClient(create_app(engine, tmp_path)) as client:
+        monkeypatch.setattr(analysis, "MAX_ANALYSIS_BYTES", 1)
+        assert client.get(f"/api/recordings/{identifier}/analysis").status_code == 413
+        monkeypatch.undo()
+        original = engine_module.analyze_recording
+
+        def mutate_during_analysis(path: Path, decoder: Decoder) -> dict:
+            result = original(path, decoder)
+            with path.open("ab") as stream:
+                stream.write(Frame(0x132, bytes(8), 0, 2).encode())
+            return result
+
+        monkeypatch.setattr(engine_module, "analyze_recording", mutate_during_analysis)
+        assert client.get(f"/api/recordings/{identifier}/analysis").status_code == 409
+        assert not engine.recorder.analysis_ids
+        assert not engine.analysis_lock.locked()

@@ -7,6 +7,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -26,9 +27,15 @@ class Frame:
         return (json.dumps(value, separators=(",", ":"), allow_nan=False) + "\n").encode()
 
 
-def read_frames(path: Path) -> Iterator[Frame]:
+def read_frames(path: Path, *, require_complete: bool = False, maximum_bytes: int | None = None) -> Iterator[Frame]:
     with path.open("rb") as source:
+        bytes_read = 0
         while line := source.readline(2049):
+            bytes_read += len(line)
+            if maximum_bytes is not None and bytes_read > maximum_bytes:
+                raise ValueError("Recording exceeds the read byte limit")
+            if require_complete and not line.endswith(b"\n"):
+                raise ValueError("Completed recording contains an interrupted frame")
             if len(line) > 2048:
                 raise ValueError("Recording contains an oversized frame")
             try:
@@ -43,18 +50,22 @@ def read_frames(path: Path) -> Iterator[Frame]:
             payload = value.get("data")
             timestamp = value.get("time")
             monotonic = value.get("monotonicNs")
-            if not isinstance(identifier, int) or not 0 <= identifier <= 0x1FFFFFFF:
+            if type(identifier) is not int or not 0 <= identifier <= 0x1FFFFFFF:
                 raise ValueError("Recording contains an invalid CAN identifier")
             if not isinstance(payload, str) or len(payload) > 16:
                 raise ValueError("Recording contains an invalid CAN payload")
-            if not isinstance(timestamp, (int, float)):
+            if not isinstance(timestamp, (int, float)) or isinstance(timestamp, bool):
                 raise ValueError("Recording contains an invalid timestamp")
             source_time: float | int = timestamp
-            if isinstance(timestamp, bool) or not math.isfinite(source_time):
+            try:
+                finite = math.isfinite(source_time)
+            except OverflowError:
+                finite = False
+            if not finite:
                 raise ValueError("Recording contains an invalid timestamp")
             if not isinstance(monotonic, int):
                 raise ValueError("Recording contains an invalid timestamp")
-            if isinstance(monotonic, bool) or monotonic < 0:
+            if isinstance(monotonic, bool) or not 0 <= monotonic <= 2**63 - 1:
                 raise ValueError("Recording contains an invalid timestamp")
             try:
                 data = bytes.fromhex(payload)
@@ -74,6 +85,7 @@ class Recorder:
         self.bytes_used = 0
         self.last_error: str | None = None
         self.last_space_check = 0.0
+        self.analysis_ids: set[str] = set()
 
     def _files(self) -> list[Path]:
         if not self.directory.exists():
@@ -141,10 +153,35 @@ class Recorder:
             raise FileNotFoundError("Recording not found")
         return path
 
+    @contextmanager
+    def completed_recording(self, session_id: str) -> Iterator[Path]:
+        with self.lock:
+            if session_id == self.active_id:
+                raise ValueError("Stop recording before analyzing this session")
+            path = self.path(session_id)
+            before = path.stat()
+            self.analysis_ids.add(session_id)
+        try:
+            yield path
+            after = path.stat()
+            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+                after.st_dev,
+                after.st_ino,
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+            ):
+                raise ValueError("Recording changed during analysis")
+        finally:
+            with self.lock:
+                self.analysis_ids.discard(session_id)
+
     def delete(self, session_id: str) -> None:
         with self.lock:
             if session_id == self.active_id:
                 raise ValueError("Stop recording before deleting this session")
+            if session_id in self.analysis_ids:
+                raise ValueError("Wait for session analysis before deleting this session")
             self.path(session_id).unlink()
 
     def status(self) -> dict:

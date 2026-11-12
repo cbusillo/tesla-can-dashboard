@@ -1,0 +1,15 @@
+.session-analysis { padding: 1rem; max-width: 68rem; margin: auto; }
+.session-analysis h2, .session-analysis h3, .session-analysis h4 { margin: .6rem 0; }
+.session-analysis p, .session-analysis small { line-height: 1.5; }
+.session-analysis small, .session-analysis li span { display: block; opacity: .8; }
+.session-picker { display: flex; flex-wrap: wrap; gap: .8rem; align-items: end; }
+.session-picker label { display: grid; gap: .4rem; flex: 1; min-width: 12rem; }
+.session-picker select, .session-picker button { padding: .8rem; font: inherit; border: 1px solid currentColor; border-radius: .5rem; background: var(--ion-background-color, #fff); color: inherit; min-height: 48px; }
+.session-picker button:disabled { opacity: .45; }
+.session-measurements { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .8rem; }
+.session-measurement { border: 1px solid #8886; border-radius: .6rem; padding: .8rem; }
+.session-measurement ol { padding-left: 1.2rem; max-height: 12rem; overflow: auto; }
+.session-measurement li { padding-bottom: .8rem; }
+.session-measurement strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.session-observations { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+.session-observations dd { margin: .35rem 0 0; font-variant-numeric: tabular-nums; }

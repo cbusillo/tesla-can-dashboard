@@ -31,7 +31,8 @@ disconnected readings. It does not record or control a vehicle.
 
 For live data, add `--interface can0`. Built-in decoding covers pack voltage,
 CAN-sign current and displayed state of charge. An operator-supplied compatible
-DBC enables the explicitly mapped energy, temperature and cell group signals.
+DBC enables explicitly mapped energy, temperature, cell group, speed, gear,
+charger line power and charge-limit signals when names and units match.
 Unavailable signals remain unavailable. No third-party DBC or real vehicle
 recording is distributed here. See [Pi installation](deploy/README.md).
 
@@ -44,8 +45,12 @@ firmware and pack compatibility must be checked on the actual car.
 
 Recordings contain selected CAN telemetry and acquisition timestamps. Replay
 never sends frames and does not interrupt an independent live recording.
-Performance timing and convenience controls are planned, not implemented.
-No vehicle command endpoint exists.
+Completed recordings have a bounded analysis API for estimated acceleration,
+rolling intervals, quarter-mile timing and battery/charger-line observations.
+See [analysis conventions and signal coverage](docs/session-analysis.md).
+The standalone session-analysis component awaits integration into the selected
+interface. New DBC mappings still need target qualification. Convenience
+controls are not implemented. No vehicle command endpoint exists.
 
 The dashboard does not provide portable internet or a hotspot setup. Browser
 availability while moving, sleep/wake behavior and touch performance require

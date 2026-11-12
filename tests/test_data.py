@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 
 import pytest
 
@@ -155,3 +156,38 @@ def test_bad_selected_frames_are_recorded_and_replay_continues(tmp_path) -> None
     assert store.frames == 1
     assert store.decode_errors == 1
     engine.close()
+
+
+def test_dbc_native_units_reserved_values_and_selection_reach_live_recording(tmp_path: Path, telemetry_dbc: Path) -> None:
+    recorder = Recorder(tmp_path / "sessions", reserve_bytes=0)
+    engine = Engine("can0", recorder, telemetry_dbc)
+    session = recorder.start()
+    acquired = time.monotonic_ns()
+    engine.ingest(Frame(100, bytes.fromhex("1027040000000000"), 0, acquired))
+    engine.ingest(Frame(102, bytes.fromhex("f82a401f00000000"), 0, acquired + 1))
+    snapshot = engine.snapshot()["signals"]
+    assert snapshot["speedKmh"]["value"] == pytest.approx(100)
+    assert snapshot["driveGear"]["value"] == 4
+    assert snapshot["chargingPowerKw"]["value"] == pytest.approx(11)
+    assert snapshot["chargeLimitPercent"]["value"] == pytest.approx(80)
+    engine.ingest(Frame(100, bytes.fromhex("ffff040000000000"), 0, acquired + 2))
+    assert engine.snapshot()["signals"]["speedKmh"]["quality"] == "invalid"
+    engine.ingest(Frame(100, b"bad", 0, acquired + 3))
+    assert engine.snapshot()["signals"]["driveGear"]["quality"] == "invalid"
+    recorder.stop()
+    assert [item.identifier for item in read_frames(recorder.path(session))] == [100, 102, 100, 100]
+    engine.close()
+
+
+def test_dbc_mph_normalizes_and_unknown_units_and_gear_codes_stay_unavailable(telemetry_dbc: Path) -> None:
+    source = telemetry_dbc.read_text().replace('"kph"', '"MPH"')
+    telemetry_dbc.write_text(source)
+    values, _ = Decoder(telemetry_dbc).decode(100, bytes.fromhex("7017040000000000"))
+    assert values["speedKmh"] == pytest.approx(60 * 1.609344)
+    telemetry_dbc.write_text(source.replace('"MPH"', '"speed"').replace('4 "DI_GEAR_D"', '4 "unqualified"'))
+    decoder = Decoder(telemetry_dbc)
+    values, _ = decoder.decode(100, bytes.fromhex("7017040000000000"))
+    store = SignalStore()
+    store.update(values, {}, 0, now=0)
+    assert store.snapshot(now=0)["signals"]["speedKmh"]["quality"] == "unavailable"
+    assert store.snapshot(now=0)["signals"]["driveGear"]["value"] is None
