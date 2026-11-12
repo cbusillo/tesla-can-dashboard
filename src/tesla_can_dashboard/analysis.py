@@ -5,8 +5,8 @@ from pathlib import Path
 import cantools
 
 from .decoder import Decoder
-from .recording import read_frames
-from .signals import CATALOG
+from .recording import InterruptedTailError, read_frames
+from .signals import CATALOG, is_valid_signal
 
 MAX_ANALYSIS_BYTES = 64 * 1024 * 1024
 MAX_ANALYSIS_FRAMES = 500_000
@@ -72,6 +72,7 @@ class Observation:
         return {
             "quality": "partial" if self.invalid or self.gaps else "observed" if self.samples else "unavailable",
             "unit": CATALOG[key].unit,
+            "label": CATALOG[key].label,
             "samples": self.samples,
             "invalidSamples": self.invalid,
             "gaps": self.gaps,
@@ -104,8 +105,9 @@ class Performance:
         self.speed_samples = 0
         self.omitted_runs = 0
 
-    def interrupt(self, reason: str) -> None:
-        self.reasons.add(reason)
+    def interrupt(self, reason: str, *, report: bool = True) -> None:
+        if report:
+            self.reasons.add(reason)
         self.previous = None
         self.pending.clear()
 
@@ -113,16 +115,16 @@ class Performance:
         if "driveGear" in values:
             self.gear = (seconds, values["driveGear"])
             if values["driveGear"] != 4:
-                self.interrupt("reverse_direction" if values["driveGear"] == 2 else "unknown_direction")
+                self.interrupt(self.direction_reason(), report=bool(self.pending) and values.get("speedKmh") != 0)
         if "speedKmh" not in values:
             return
         speed = values["speedKmh"]
         self.speed_samples += 1
         if speed is None:
-            self.interrupt("invalid_speed")
+            self.interrupt("invalid_speed", report=bool(self.pending) or self.previous is not None and self.previous[1] > 0)
             return
         if self.gear is None or self.gear[1] != 4 or seconds - self.gear[0] > CATALOG["driveGear"].stale_after:
-            self.interrupt("unknown_direction")
+            self.interrupt(self.direction_reason(), report=speed > 0 or bool(self.pending))
             return
         previous = self.previous
         self.previous = (seconds, speed)
@@ -131,7 +133,9 @@ class Performance:
         previous_time, previous_speed = previous
         gap = seconds - previous_time
         if gap <= 0 or gap > MAX_SPEED_GAP:
-            self.interrupt("non_monotonic_speed" if gap <= 0 else "speed_gap")
+            self.interrupt(
+                "non_monotonic_speed" if gap <= 0 else "speed_gap", report=bool(self.pending) or speed > 0 or previous_speed > 0
+            )
             self.previous = (seconds, speed)
             return
         for run in self.pending.values():
@@ -152,6 +156,11 @@ class Performance:
                 end = previous_time + gap * (upper - previous_speed) / (speed - previous_speed)
                 self.finish(key, end, upper)
         self.integrate_distance(previous_time, previous_speed, seconds, speed)
+
+    def direction_reason(self) -> str:
+        if self.gear is None or self.gear[1] not in {1, 2, 3}:
+            return "unknown_direction"
+        return "reverse_direction" if self.gear[1] == 2 else "non_forward_gear"
 
     def finish(self, key: str, end: float, speed: float) -> None:
         run = self.pending.pop(key)
@@ -209,11 +218,7 @@ class Performance:
 
 
 def valid_values(values: dict[str, float | None]) -> dict[str, float | None]:
-    return {
-        key: value if value is not None and math.isfinite(value) and CATALOG[key].minimum <= value <= CATALOG[key].maximum else None
-        for key, value in values.items()
-        if key in CATALOG
-    }
+    return {key: value if is_valid_signal(key, value) else None for key, value in values.items() if key in CATALOG}
 
 
 def analyze_recording(path: Path, decoder: Decoder) -> dict:
@@ -250,6 +255,9 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
                     observations[key].add(seconds, value, CATALOG[key].stale_after)
     except AnalysisLimitError:
         raise
+    except InterruptedTailError:
+        reasons.add("interrupted_tail")
+        performance.pending.clear()
     except ValueError:
         reasons.add("invalid_recording")
         invalid = True
@@ -260,6 +268,14 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
         reasons.add("missing_speed")
     duration = (previous_ns - first_ns) / 1e9 if previous_ns is not None and first_ns is not None and not invalid else None
     power = observations["chargingPowerKw"]
+    battery_signals = {key: observation.result(key) for key, observation in observations.items()}
+    for signal in battery_signals.values():
+        if invalid:
+            signal.update(
+                quality="invalid", first=None, last=None, minimum=None, maximum=None, observedDelta=None, curve=[], coveredSeconds=0
+            )
+        elif "interrupted_tail" in reasons and signal["samples"]:
+            signal["quality"] = "partial"
     return {
         "schemaVersion": 1,
         "quality": "invalid" if invalid else "partial" if reasons else "observed",
@@ -275,12 +291,17 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
             "direction": "fresh DBC drive gear required throughout",
             "precision": "estimates; sample resolution is not a sensor accuracy guarantee",
         },
-        "decoder": {"profile": "current-operator-dbc" if decoder.database else "built-in", "targetQualified": False},
+        "decoder": {
+            "profile": "current-operator-dbc" if decoder.database else "built-in",
+            "sourceCompatibility": "not-established-by-analysis",
+            "speedSupplement": decoder.speed_supplement,
+            "recordedProfile": "unknown",
+        },
         "performance": performance.result(invalid),
         "battery": {
-            "quality": "invalid" if invalid else "observations-only",
+            "quality": "invalid" if invalid else "partial" if "interrupted_tail" in reasons else "observations-only",
             "currentDirection": "unqualified",
-            "signals": {key: observation.result(key) for key, observation in observations.items()},
+            "signals": battery_signals,
             "charging": {
                 "boundary": "charger-line; not pack energy or DC fast charging",
                 "observedEnergyKwh": power.integral / 3600 if power.covered_seconds and not invalid else None,
@@ -288,7 +309,7 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
                 "quality": "invalid"
                 if invalid
                 else "partial"
-                if power.invalid or power.gaps
+                if power.invalid or power.gaps or "interrupted_tail" in reasons
                 else "estimated"
                 if power.covered_seconds
                 else "unavailable",

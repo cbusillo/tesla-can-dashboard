@@ -18,9 +18,19 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Engine:
-    def __init__(self, interface: str | None, recorder: Recorder, dbc: Path | None = None, cell_count: int = 96) -> None:
+    def __init__(
+        self,
+        interface: str | None,
+        recorder: Recorder,
+        dbc: Path | None = None,
+        cell_count: int = 96,
+        *,
+        speed_dbc: Path | None = None,
+        auto_record: bool = False,
+    ) -> None:
         self.interface = interface
-        self.decoder = Decoder(dbc)
+        self.decoder = Decoder(dbc, speed_dbc)
+        self.auto_record = auto_record
         self.recorder = recorder
         self.store = SignalStore(cell_count)
         self.stop_event = threading.Event()
@@ -48,6 +58,17 @@ class Engine:
 
     def start(self) -> None:
         if self.interface:
+            if self.auto_record:
+                try:
+                    self.recorder.start()
+                except (OSError, ValueError) as error:
+                    with self.recorder.lock:
+                        self.recorder.last_error = (
+                            str(error)
+                            if isinstance(error, ValueError)
+                            else "Automatic recording could not start: storage is unavailable"
+                        )
+                    LOGGER.warning("Automatic recording could not start; the live receiver will continue")
             thread = threading.Thread(target=self._receive, daemon=True)
             self.thread = thread
             thread.start()

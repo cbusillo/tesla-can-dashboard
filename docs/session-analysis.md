@@ -13,12 +13,13 @@ The receive-only candidate adds these exact DBC names:
 | --- | --- | --- |
 | `DI_vehicleSpeed` | `speedKmh` | `MPH` / `mph` × 1.609344; `kph` / `km/h` unchanged |
 | `DI_gear` | `driveGear` | DBC enum labels `DI_GEAR_P/R/N/D` normalized to 1/2/3/4 |
-| `ChargeLinePower264` | `chargingPowerKw` | `W` ÷ 1000; `kW` unchanged |
+| `PCS_chgInputPower` | `chargingPowerKw` | `W` ÷ 1000; `kW` unchanged |
 | `UI_chargeTerminationPct` | `chargeLimitPercent` | `%` unchanged |
 
 Definitions are grounded in the primary
 [opendbc Tesla profile](https://github.com/commaai/opendbc/blob/master/opendbc/dbc/tesla_can.dbc)
-and [Model 3 DBC](https://github.com/joshwardell/model3dbc/blob/master/Model3CAN.dbc).
+the [Model 3 DBC](https://github.com/joshwardell/model3dbc/blob/master/Model3CAN.dbc),
+and the [modern signal database](https://github.com/talas9/tesla-can-signal-db).
 Their layouts differ; these links do not establish compatibility with a
 particular vehicle. No new raw bit layout is built in. Message layouts come
 only from the operator-supplied DBC. Unsupported units stay unavailable;
@@ -55,11 +56,14 @@ invalid/unknown/stale gear, invalid speed, decode errors affecting drive
 signals, repeated speed times or speed gaps over 0.5 seconds discard pending
 runs. A new standing run requires another zero. Rolling runs require another
 lower-threshold crossing. An incomplete interval is unavailable, not zero.
-Malformed/truncated recordings or backwards acquisition clocks invalidate
-all results, including earlier plausible runs. Gap-free runs elsewhere can
+Malformed interior frames or backwards acquisition clocks invalidate
+all results, including earlier plausible runs. An interrupted final line is
+excluded with `interrupted_tail` and partial quality; complete earlier runs
+and observations remain usable. Incomplete pending runs are never completed
+from the interrupted tail. Gap-free runs elsewhere can
 still appear with the session's warnings; warnings must stay visible.
 
-`battery.signals` supplies `quality`, `unit`, `samples`, `invalidSamples`,
+`battery.signals` supplies `quality`, `label`, `unit`, `samples`, `invalidSamples`,
 `gaps`, `first`, `last`, `minimum`, `maximum`, `observedDelta`,
 `coveredSeconds`, `curve` and `curveSampled`. Curves are sampled `[elapsed
 seconds, value-or-null]` observations; a scatter display avoids inventing
@@ -72,6 +76,28 @@ adjacent charger-line samples only, reported as `observedEnergyKwh`,
 An invalid recording's observations must not be presented as a valid summary.
 CAN-sign current remains unqualified. No regen, age, health percentage,
 range or charging ETA is inferred.
+
+## Startup recording and supplemental speed profile
+
+`--record-on-start` explicitly opts a live receiver into recording at server
+startup, without a browser visit. It requires `--interface`; demonstrations
+cannot opt in. It uses the existing recorder, free-space reserve and total
+`--recording-limit-mib` budget. It never erases older recordings, does not
+record replay as live, and stops at the storage limit without a retry loop.
+A startup storage failure appears in recording status while the receiver and
+server continue. Each successful service start creates a new recording;
+this is not automatic per-drive segmentation or an indefinite recording promise.
+Stop recording before analyzing the active session.
+
+When a primary DBC omits `DI_vehicleSpeed`, `--speed-dbc /path/to/speed.dbc`
+may supply it separately alongside `--dbc /path/to/primary.dbc`. Only its one
+speed message is selected and only its speed signal is exposed. Other battery
+or control definitions in that file are ignored. An ambiguous speed definition,
+a duplicate primary speed definition, or a conflicting message identifier is
+rejected. No supplemental bit decoder is built in and no third-party profile
+is bundled. The private operator file must remain outside source control.
+Exact-zero standing starts intentionally remain unavailable if a source reports
+a nonzero value at rest; analysis never invents a calibration offset.
 
 ## Limits and coordination
 

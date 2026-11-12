@@ -48,6 +48,10 @@ never sends frames and does not interrupt an independent live recording.
 Completed recordings have a bounded analysis API for estimated acceleration,
 rolling intervals, quarter-mile timing and battery/charger-line observations.
 See [analysis conventions and signal coverage](docs/session-analysis.md).
+Use `--record-on-start` with a live `--interface` to capture at server startup
+without opening the browser. Existing recordings and storage limits are kept;
+a capture-start failure leaves the receiver/server running. An optional
+`--speed-dbc` supplies only speed when the primary operator DBC omits it.
 The standalone session-analysis component awaits integration into the selected
 interface. New DBC mappings still need target qualification. Convenience
 controls are not implemented. No vehicle command endpoint exists.

@@ -15,6 +15,10 @@ from typing import cast
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
 
 
+class InterruptedTailError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class Frame:
     identifier: int
@@ -35,7 +39,7 @@ def read_frames(path: Path, *, require_complete: bool = False, maximum_bytes: in
             if maximum_bytes is not None and bytes_read > maximum_bytes:
                 raise ValueError("Recording exceeds the read byte limit")
             if require_complete and not line.endswith(b"\n"):
-                raise ValueError("Completed recording contains an interrupted frame")
+                raise InterruptedTailError("Completed recording contains an interrupted frame")
             if len(line) > 2048:
                 raise ValueError("Recording contains an oversized frame")
             try:

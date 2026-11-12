@@ -17,6 +17,7 @@ type Measurement = {
   runs: Run[];
 };
 type Observation = {
+  label: string;
   quality: string;
   unit: string;
   samples: number;
@@ -54,17 +55,11 @@ const labels: Record<string, string> = {
   "30-70-mph": "30–70 mph",
   "80-120-kmh": "80–120 km/h",
   "quarter-mile": "Quarter mile",
-  displayedChargePercent: "Charge level",
-  remainingEnergyKwh: "Remaining energy",
-  fullPackEnergyKwh: "Full pack energy",
-  minimumTemperatureC: "Lowest pack temperature",
-  maximumTemperatureC: "Highest pack temperature",
-  chargingPowerKw: "Charger line power",
-  chargeLimitPercent: "Charge limit",
-  voltageV: "Pack voltage",
-  currentA: "Pack current (CAN sign)",
+
 };
 const reasons: Record<string, string> = {
+  interrupted_tail: "Interrupted final frame excluded; complete earlier samples retained",
+  non_forward_gear: "Park or Neutral interrupted measurement",
   missing_speed: "No supported speed samples",
   unknown_direction: "Forward gear missing, stale or unqualified",
   reverse_direction: "Reverse gear interrupted measurement",
@@ -81,7 +76,9 @@ function explain(items: string[]) {
   return items.map((item) => reasons[item] || item.replaceAll("_", " ")).join(". ");
 }
 function observed(value: number | null, unit: string) {
-  return value === null ? "Unavailable" : `${value.toFixed(1)} ${unit}`;
+  if (value === null) return "Unavailable";
+  if (unit === "kWh" && value > 0 && value < 0.001) return "<0.001 kWh";
+  return `${value.toFixed(unit === "kWh" ? 3 : 1)} ${unit}`;
 }
 function MeasurementCard({ measurement }: { measurement: Measurement }) {
   return (
@@ -137,12 +134,12 @@ export function SessionAnalysis({ sessions, activeId }: { sessions: Session[]; a
     const timeout = window.setTimeout(() => request.abort(), 30000);
     try {
       const response = await fetch(`/api/recordings/${encodeURIComponent(selected)}/analysis`, { signal: request.signal });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({ detail: "Session analysis is unavailable. Try again." }));
       if (!response.ok) throw new Error(data.detail || "Session analysis failed");
       if (!request.signal.aborted) setResult(data as Analysis);
     } catch (failure) {
       if (controller.current === request) {
-        setError(request.signal.aborted ? "Analysis timed out. Try a shorter completed recording." : String(failure));
+        setError(request.signal.aborted ? "Analysis took too long. Wait for it to finish before trying again." : String(failure));
       }
     } finally {
       window.clearTimeout(timeout);
@@ -177,9 +174,9 @@ export function SessionAnalysis({ sessions, activeId }: { sessions: Session[]; a
           <h3>Battery and charging observations</h3><p>Curves show sampled observations on an elapsed-seconds axis. Points are not joined across unobserved time.</p>
           <p>{observed(result.battery.charging.observedEnergyKwh, "kWh")} across {result.battery.charging.coveredSeconds.toFixed(1)} s of covered charger-line samples ({result.battery.charging.quality}). This is not pack energy or DC fast-charge energy.</p>
           <dl className="session-observations">{Object.entries(result.battery.signals).map(([key, signal]) => <div key={key}>
-            <dt>{labels[key] || key}</dt>
+            <dt>{signal.label}</dt>
             <dd>{signal.samples ? <>{observed(signal.first, signal.unit)} → {observed(signal.last, signal.unit)}<small>Observed {observed(signal.minimum, signal.unit)} to {observed(signal.maximum, signal.unit)} · {signal.samples} samples · {signal.quality}</small></> : "Unavailable"}</dd>
-            {signal.samples > 0 && <ObservationCurve signal={signal} label={labels[key] || key} />}
+            {signal.samples > 0 && <ObservationCurve signal={signal} label={signal.label} />}
           </div>)}</dl>
           <p>Decoded with the current profile. The recording does not identify its original profile. Current sign is unqualified; these observations do not establish battery health, age, range or charging ETA.</p>
         </>}

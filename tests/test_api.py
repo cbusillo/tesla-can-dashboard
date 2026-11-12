@@ -165,10 +165,9 @@ def test_analysis_rejects_oversized_input_and_does_not_return_changed_recording(
         monkeypatch.setattr(analysis, "MAX_ANALYSIS_BYTES", 1)
         assert client.get(f"/api/recordings/{identifier}/analysis").status_code == 413
         monkeypatch.undo()
-        original = engine_module.analyze_recording
 
         def mutate_during_analysis(path: Path, decoder: Decoder) -> dict:
-            result = original(path, decoder)
+            result = analysis.analyze_recording(path, decoder)
             with path.open("ab") as stream:
                 stream.write(Frame(0x132, bytes(8), 0, 2).encode())
             return result

@@ -32,6 +32,11 @@ SIGNALS = (
 CATALOG = {definition.key: definition for definition in SIGNALS}
 
 
+def is_valid_signal(key: str, value: float | None) -> bool:
+    definition = CATALOG[key]
+    return value is not None and math.isfinite(value) and definition.minimum <= value <= definition.maximum
+
+
 @dataclass
 class Sample:
     value: float | None
@@ -81,10 +86,7 @@ class SignalStore:
             for key, value in values.items():
                 if key not in CATALOG:
                     continue
-                definition = CATALOG[key]
-                self._add(
-                    self.series[key], value, value is not None and definition.minimum <= value <= definition.maximum, timestamp, now
-                )
+                self._add(self.series[key], value, is_valid_signal(key, value), timestamp, now)
             for index, value in cells.items():
                 if index in self.cells:
                     self._add(self.cells[index], value, value is not None and 0 < value < 6, timestamp, now)
