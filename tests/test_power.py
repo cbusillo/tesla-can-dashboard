@@ -1,10 +1,12 @@
 import struct
+import time
 
 import pytest
 
 from tesla_can_dashboard.analysis import analyze_recording
 from tesla_can_dashboard.decoder import Decoder
-from tesla_can_dashboard.recording import Frame
+from tesla_can_dashboard.engine import Engine
+from tesla_can_dashboard.recording import Frame, Recorder
 
 
 @pytest.fixture
@@ -70,3 +72,21 @@ def test_parked_charging_cannot_be_reported_as_regeneration(tmp_path, power_dbc)
     energy = analyze_recording(path, Decoder(power_dbc, discharge_current="negative"))["battery"]["energy"]
     assert energy["regeneratedKwh"] is None
     assert energy["peakRegenKw"] is None
+
+
+def test_live_power_is_invalidated_when_its_source_frame_is_bad(tmp_path) -> None:
+    engine = Engine("can0", Recorder(tmp_path / "raw", reserve_bytes=0), discharge_current="negative")
+    frame = pack(time.monotonic(), -100)
+    engine.ingest(frame)
+    snapshot = engine.snapshot()
+    assert snapshot["signals"]["batteryPowerKw"]["value"] == pytest.approx(40)
+    assert snapshot["currentDirection"] == "negative-discharge"
+    engine.ingest(Frame(frame.identifier, b"bad", frame.timestamp, frame.monotonic_ns + 1))
+    assert engine.snapshot()["signals"]["batteryPowerKw"]["quality"] == "invalid"
+
+
+def test_unsupported_current_units_cannot_supply_derived_power(power_dbc) -> None:
+    power_dbc.write_text(power_dbc.read_text().replace('"A"', '"unknown"'))
+    frame = pack(0, -100)
+    values, _ = Decoder(power_dbc, discharge_current="negative").decode(frame.identifier, frame.data)
+    assert "batteryPowerKw" not in values
