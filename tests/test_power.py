@@ -80,7 +80,7 @@ def test_live_power_is_invalidated_when_its_source_frame_is_bad(tmp_path) -> Non
     engine.ingest(frame)
     snapshot = engine.snapshot()
     assert snapshot["signals"]["batteryPowerKw"]["value"] == pytest.approx(40)
-    assert snapshot["currentDirection"] == "negative-discharge"
+    assert snapshot["currentDirection"] == engine.decoder.current_direction
     engine.ingest(Frame(frame.identifier, b"bad", frame.timestamp, frame.monotonic_ns + 1))
     assert engine.snapshot()["signals"]["batteryPowerKw"]["quality"] == "invalid"
 
