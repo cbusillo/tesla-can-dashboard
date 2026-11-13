@@ -118,6 +118,38 @@
 .session-analysis [role="alert"] {
   color: var(--ion-color-danger);
 }
+.session-comparison {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.session-comparison th,
+.session-comparison td {
+  text-align: right;
+  padding: 14px 8px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 400;
+}
+.session-comparison td {
+  font-size: 17px;
+}
+.session-comparison th:first-child {
+  text-align: left;
+  padding-left: 0;
+  color: var(--muted);
+}
+.session-comparison thead th {
+  color: var(--muted);
+}
+.session-reading-details summary {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 12px 0;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+}
 @media (max-width: 500px) {
   .session-analysis {
     padding: 16px;
