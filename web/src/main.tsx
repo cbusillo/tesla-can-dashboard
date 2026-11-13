@@ -44,7 +44,11 @@ import {
   type Snapshot,
 } from "./types";
 import { Metric, Page } from "./dashboard";
-import { SessionAnalysis } from "./session-analysis";
+const SessionAnalysis = lazy(() =>
+  import("./session-analysis").then((module) => ({
+    default: module.SessionAnalysis,
+  })),
+);
 import "./style.css";
 initialize({ mode: "ios", animated: false });
 addIcons({
@@ -201,6 +205,7 @@ function App() {
     save,
   } = useDashboard();
   const [tab, setTab] = useState("instruments"),
+    [editing, setEditing] = useState(false),
     [selectedCell, setSelectedCell] = useState<number | null>(1),
     [editKey, setEditKey] = useState<string | null>(null),
     [rangeMin, setRangeMin] = useState(""),
@@ -297,7 +302,7 @@ function App() {
   function instrument(key: string, dial = false) {
     const definition = catalog.find((d) => d.key === key),
       reading = signals[key];
-    const label = definition?.label || key;
+    const label = definition?.label || "Instrument";
     return (
       <section
         class={`instrument ${reading?.quality || "unavailable"}`}
@@ -305,13 +310,15 @@ function App() {
       >
         <div class="instrument-heading">
           <h2>{label}</h2>
-          <ion-button
-            fill="clear"
-            onClick={() => openRange(key)}
-            aria-label={`Configure ${label}`}
-          >
-            <ion-icon name="options-outline" slot="icon-only" />
-          </ion-button>
+          {editing && (
+            <ion-button
+              fill="clear"
+              onClick={() => openRange(key)}
+              aria-label={`Configure ${label}`}
+            >
+              <ion-icon name="options-outline" slot="icon-only" />
+            </ion-button>
+          )}
         </div>
         {dial ? (
           <Suspense fallback={<div class="chart-loading">Loading dial…</div>}>
@@ -366,18 +373,33 @@ function App() {
           )}
         </div>
       )}
-      <ion-tabs onionTabsDidChange={(event) => setTab(event.detail.tab)}>
+      <ion-tabs
+        onionTabsDidChange={(event) => {
+          setTab(event.detail.tab);
+          setEditing(false);
+          setChooseOpen(false);
+          setEditKey(null);
+        }}
+      >
         <Page
           name="instruments"
           title="Overview"
           {...common}
           toolbar={
             <ion-button
+              class="edit-toggle"
               fill="clear"
-              onClick={() => setChooseOpen(true)}
-              aria-label="Choose instruments"
+              onClick={() => {
+                setEditing(!editing);
+                setChooseOpen(false);
+                setEditKey(null);
+              }}
+              aria-pressed={editing}
+              aria-label={
+                editing ? "Finish editing instruments" : "Edit instruments"
+              }
             >
-              <ion-icon slot="icon-only" name="options-outline" />
+              {editing ? "Done" : "Edit"}
             </ion-button>
           }
         >
@@ -391,29 +413,36 @@ function App() {
                   <small>{readingStatus(charge)}</small>
                 )}
               </div>
-              <label class="compact-select">
-                <span class="sr-only">Instrument display</span>
-                <select
-                  aria-label="Instrument display"
-                  value={layout.presentation}
-                  disabled={busy}
-                  onChange={(e) =>
-                    save({
-                      ...layout,
-                      presentation: e.currentTarget
-                        .value as Layout["presentation"],
-                    })
-                  }
-                >
-                  <option value="dials">Dials</option>
-                  <option value="readings">Readings</option>
-                  <option value="history">History</option>
-                </select>
-              </label>
+              {editing && (
+                <div class="instrument-tools">
+                  <ion-button fill="clear" onClick={() => setChooseOpen(true)}>
+                    Choose instruments
+                  </ion-button>
+                  <label class="compact-select">
+                    <span class="sr-only">Instrument display</span>
+                    <select
+                      aria-label="Instrument display"
+                      value={layout.presentation}
+                      disabled={busy}
+                      onChange={(e) =>
+                        save({
+                          ...layout,
+                          presentation: e.currentTarget
+                            .value as Layout["presentation"],
+                        })
+                      }
+                    >
+                      <option value="dials">Dials</option>
+                      <option value="readings">Readings</option>
+                      <option value="history">History</option>
+                    </select>
+                  </label>
+                </div>
+              )}
             </div>
             {!layout.instruments.length && (
               <div class="empty">
-                <p>Choose the signals you want to watch.</p>
+                <p>Add an instrument.</p>
                 <ion-button onClick={() => setChooseOpen(true)}>
                   Choose instruments
                 </ion-button>
@@ -433,18 +462,24 @@ function App() {
                         <Metric
                           key={key}
                           label={
-                            catalog.find((d) => d.key === key)?.label || key
+                            catalog.find((d) => d.key === key)?.label ||
+                            "Instrument"
                           }
                           reading={signals[key]}
                           units={layout.units}
                         >
-                          <ion-button
-                            fill="clear"
-                            onClick={() => openRange(key)}
-                            aria-label={`Configure ${catalog.find((d) => d.key === key)?.label || key}`}
-                          >
-                            <ion-icon name="options-outline" slot="icon-only" />
-                          </ion-button>
+                          {editing && (
+                            <ion-button
+                              fill="clear"
+                              onClick={() => openRange(key)}
+                              aria-label={`Configure ${catalog.find((d) => d.key === key)?.label || key}`}
+                            >
+                              <ion-icon
+                                name="options-outline"
+                                slot="icon-only"
+                              />
+                            </ion-button>
+                          )}
                         </Metric>
                       ))}
                     </div>
@@ -458,21 +493,27 @@ function App() {
             {layout.presentation !== "history" && (
               <section class="history-panel">
                 <div class="section-heading">
-                  <h2>Recent history</h2>
-                  <label class="compact-select">
-                    <span class="sr-only">History signal</span>
-                    <select
-                      aria-label="History signal"
-                      value={historyKey}
-                      onChange={(e) => setHistoryKey(e.currentTarget.value)}
-                    >
-                      {catalog.map((d) => (
-                        <option value={d.key} key={d.key}>
-                          {d.label} ({displayUnit(d.unit, layout.units)})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <h2>
+                    {historyDefinition
+                      ? `${historyDefinition.label} history`
+                      : "Recent history"}
+                  </h2>
+                  {editing && (
+                    <label class="compact-select">
+                      <span class="sr-only">History instrument</span>
+                      <select
+                        aria-label="History instrument"
+                        value={historyKey}
+                        onChange={(e) => setHistoryKey(e.currentTarget.value)}
+                      >
+                        {catalog.map((d) => (
+                          <option value={d.key} key={d.key}>
+                            {d.label} ({displayUnit(d.unit, layout.units)})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
                 {tab === "instruments" && (
                   <Suspense fallback={<p>Loading history…</p>}>
@@ -621,7 +662,6 @@ function App() {
             <div class="screen-heading">
               <div>
                 <h2>Battery charge</h2>
-                <p>Pack current uses the CAN sign.</p>
               </div>
               <div class={`charging-level ${charge?.quality || "unavailable"}`}>
                 <strong>{display(charge, layout.units)}</strong>
@@ -652,7 +692,7 @@ function App() {
                 units={layout.units}
               />
               <Metric
-                label="Current (CAN sign)"
+                label="Pack current"
                 reading={signals.currentA}
                 units={layout.units}
               />
@@ -678,7 +718,7 @@ function App() {
                     reading={signals.currentA}
                     units={layout.units}
                     dark={dark}
-                    label="Pack current (CAN sign)"
+                    label="Pack current"
                     staleAfter={
                       catalog.find((d) => d.key === "currentA")?.stale_after
                     }
@@ -808,11 +848,15 @@ function App() {
           {!data?.recording.sessions.length && (
             <p class="ion-padding">No recordings</p>
           )}
-          <SessionAnalysis
-            sessions={data?.recording.sessions || []}
-            activeId={data?.recording.activeId || null}
-            units={layout.units}
-          />
+          {tab === "sessions" && (
+            <Suspense fallback={<p class="ion-padding">Loading recordings…</p>}>
+              <SessionAnalysis
+                sessions={data?.recording.sessions || []}
+                activeId={data?.recording.activeId || null}
+                units={layout.units}
+              />
+            </Suspense>
+          )}
         </Page>
         <Page name="settings" title="Settings" {...common}>
           <main class="settings-page">

@@ -66,20 +66,18 @@ const labels: Record<string, string> = {
   "quarter-mile": "Quarter mile",
 };
 const reasons: Record<string, string> = {
-  interrupted_tail:
-    "Interrupted final frame excluded; complete earlier samples retained",
+  interrupted_tail: "The recording ended before the final reading",
   non_forward_gear: "Park or Neutral interrupted measurement",
   missing_speed: "No supported speed samples",
-  unknown_direction: "Forward gear missing, stale or unqualified",
+  unknown_direction: "Forward travel was not confirmed",
   reverse_direction: "Reverse gear interrupted measurement",
   invalid_speed: "Invalid speed interrupted measurement",
   speed_gap: "Speed samples too far apart",
-  non_monotonic_speed: "Speed acquisition times repeated or ran backwards",
+  non_monotonic_speed: "Speed reading times were inconsistent",
   incomplete_interval: "No complete interval with sufficient data",
-  invalid_recording:
-    "Recording incomplete, corrupt or acquisition times ran backwards",
-  empty_recording: "Recording has no frames",
-  decode_errors: "Some frames could not be decoded",
+  invalid_recording: "The recording could not be read reliably",
+  empty_recording: "No readings recorded",
+  decode_errors: "Some readings could not be read",
   run_limit: "Run display limit reached; no best selected",
 };
 function explain(items: string[]) {
@@ -95,7 +93,7 @@ function observed(value: number | null, unit: string, units = "metric") {
 function MeasurementCard({ measurement }: { measurement: Measurement }) {
   return (
     <article className="session-measurement">
-      <h4>{labels[measurement.id] || measurement.id}</h4>
+      <h4>{labels[measurement.id] || "Measurement"}</h4>
       {measurement.runs.length === 0 ? (
         <p>Unavailable</p>
       ) : (
@@ -140,7 +138,7 @@ function ObservationCurve({
   const accent = style.getPropertyValue("--accent").trim() || style.color;
   return (
     <Chart
-      label={`${label} sampled observations by acquisition seconds`}
+      label={`${label} over time`}
       height={160}
       option={{
         grid: { left: 50, right: 16, top: 20, bottom: 35 },
@@ -269,7 +267,6 @@ export function SessionAnalysis({
       {result && (
         <div aria-live="polite">
           <p>
-            {result.recording.frames.toLocaleString()} frames ·{" "}
             {observed(result.recording.durationSeconds, "s")} · Estimates · No
             rollout
             {result.quality === "partial"
@@ -287,8 +284,8 @@ export function SessionAnalysis({
                   Estimates with no rollout. Standing timing starts at the last
                   observed zero. Speed samples must be at most{" "}
                   {result.timing.maximumSpeedGapSeconds} s apart. Durations use
-                  userspace acquisition timestamps. Sensor accuracy is not
-                  established by this analysis.
+                  recorded reading times. Timing accuracy has not been
+                  independently verified.
                 </p>
                 {result.reasons.length > 0 && <p>{explain(result.reasons)}</p>}
                 <p>
@@ -296,8 +293,8 @@ export function SessionAnalysis({
                   are not joined across unobserved time.
                 </p>
                 <p>
-                  Decoded with the current profile; the original profile is
-                  unknown. Current sign is unqualified. These observations do
+                  Compatibility with the recording's original setup has not been
+                  verified. Current direction is unverified. These readings do
                   not establish battery health, age, range or charging ETA.
                 </p>
                 <p>
@@ -311,8 +308,8 @@ export function SessionAnalysis({
                 <section key={group.convention}>
                   <h3>
                     {group.convention.startsWith("standing")
-                      ? "Standing · no rollout"
-                      : "Rolling · threshold crossings"}
+                      ? "Standing start"
+                      : "Rolling start"}
                   </h3>
                   <div className="session-measurements">
                     {group.measurements.map((measurement) => (
@@ -324,7 +321,7 @@ export function SessionAnalysis({
                   </div>
                 </section>
               ))}
-              <h3>Battery and charging observations</h3>
+              <h3>Battery and charging</h3>
               <p>
                 AC input energy ·{" "}
                 {observed(result.battery.charging.observedEnergyKwh, "kWh")} ·{" "}

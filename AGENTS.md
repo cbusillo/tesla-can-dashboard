@@ -11,6 +11,9 @@
 - Use uv for Python tooling. Use local frontend assets with no CDN dependency.
 - Keep the interface responsive on an Intel Atom browser. Test with recorded
   fixtures before requesting a physical vehicle test; batch physical checks.
+- Treat the product as an instrument panel: no hero or marketing copy, and use
+  plain labels rather than programming terms. Instrument configuration belongs
+  behind an explicit Edit/Done mode, hidden during normal use.
 - Experimental design entries are independent. Do not inspect another entry or
   include provider/model identities in their source before the owner compares them.
 - Put generated screenshots, logs, reviews and other task evidence outside Git

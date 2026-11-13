@@ -19,7 +19,10 @@ as readings, with selectable recent history. Cells provides chart selection,
 a group map and large previous/next controls. Charging shows available pack
 readings and current history. Sessions and Settings remain in the bottom
 navigation. Existing saved instruments, ranges, units and appearance are
-preserved. Charging power and charge limit remain unavailable until decoded;
+preserved. Overview opens with its instruments ready to read; Edit reveals
+instrument choices, display style, history selection and dial limits. Done or
+leaving Overview hides those controls. Editing is not restored on reload.
+Charging power and charge limit remain unavailable until decoded;
 the app does not estimate range, charging ETA or current direction.
 
 ## Try the demonstration
