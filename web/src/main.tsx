@@ -945,7 +945,7 @@ function App() {
               <ion-label>Connection</ion-label>
             </ion-list-header>
             <ion-list>
-              <ion-item href="https://example.com/" target="_self" rel="noreferrer" detail>
+              <ion-item href="https://checkip.amazonaws.com/" target="_self" rel="noreferrer" detail>
                 <ion-label>Open internet test page</ion-label>
               </ion-item>
             </ion-list>
