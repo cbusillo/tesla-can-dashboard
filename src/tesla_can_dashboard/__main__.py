@@ -13,6 +13,9 @@ def main() -> None:
     parser.add_argument("--interface", help="SocketCAN interface; omitted starts the replay demonstration")
     parser.add_argument("--dbc", type=Path, help="Operator-supplied compatible DBC; not bundled")
     parser.add_argument(
+        "--discharge-current", choices=("positive", "negative"), help="Qualified pack-current polarity for this profile"
+    )
+    parser.add_argument(
         "--record-on-start", action="store_true", help="Start bounded recording at live startup; requires --interface"
     )
     parser.add_argument("--cells", type=int, default=96)
@@ -29,7 +32,9 @@ def main() -> None:
     if args.record_on_start and not args.interface:
         parser.error("--record-on-start requires a live --interface")
     recorder = Recorder(args.data_dir / "recordings", args.recording_limit_mib * 1024 * 1024)
-    engine = Engine(args.interface, recorder, args.dbc, args.cells, auto_record=args.record_on_start)
+    engine = Engine(
+        args.interface, recorder, args.dbc, args.cells, auto_record=args.record_on_start, discharge_current=args.discharge_current
+    )
     app = create_app(engine, args.data_dir, args.assets, set(args.allowed_origin) or None, args.designs)
     uvicorn.run(app, host=args.bind, port=args.port)
 

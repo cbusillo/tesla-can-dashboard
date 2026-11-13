@@ -49,7 +49,12 @@ recording is distributed here. See [Pi installation](deploy/README.md).
 
 ## Limits of this preview
 
-Pack current direction is not yet qualified. Cell group spread requires every
+Pack current direction defaults to unqualified. An operator who has qualified
+the exact car/profile can use `--discharge-current negative` or `positive`.
+This enables signed battery power from voltage/current decoded together in
+one frame. Raw current remains unchanged. Positive power is draw; negative
+power flows into the pack. Profiles with separate voltage/current messages
+do not synthesize power from held values. Cell group spread requires every
 configured group to have a fresh valid reading. Voltage balance alone does not
 establish battery health, individual cell age or warranty condition. Source
 firmware and pack compatibility must be checked on the actual car.

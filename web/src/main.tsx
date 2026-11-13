@@ -505,7 +505,9 @@ function App() {
                   {!editing && historyDefinition && (
                     <small>
                       {displayUnit(historyDefinition.unit, layout.units)}
-                      {historyKey === "currentA"
+                      {historyKey === "currentA" &&
+                      (data?.currentDirection ?? "unqualified") ===
+                        "unqualified"
                         ? " · direction unverified"
                         : ""}
                     </small>
@@ -745,7 +747,11 @@ function App() {
               <section class="history-panel">
                 <div class="section-heading">
                   <h2>Pack current history</h2>
-                  <small>A · direction unverified</small>
+                  <small>
+                    {(data?.currentDirection ?? "unqualified") === "unqualified"
+                      ? "A · direction unverified"
+                      : "A"}
+                  </small>
                 </div>
               {tab === "charging" && !batteryHistory && (
                   <Suspense fallback={<p>Loading history…</p>}>

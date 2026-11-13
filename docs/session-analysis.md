@@ -81,8 +81,15 @@ catalog stale threshold. Charging energy is a trapezoidal integral of valid
 adjacent charger-line samples only, reported as `observedEnergyKwh`,
 `coveredSeconds` and `quality`; gaps and invalid samples are excluded.
 An invalid recording's observations must not be presented as a valid summary.
-CAN-sign current remains unqualified. No regen, age, health percentage,
-range or charging ETA is inferred.
+Current polarity remains unqualified by default. With explicit profile-qualified
+`--discharge-current`, `battery.energy` reports estimated driving energy used
+and regained, peak draw/regen and covered seconds. These use voltage/current
+from the same acquired frame and only fresh Drive gear; parked charging is
+not counted as regeneration. Integrals split at zero crossings and exclude
+invalid samples, stale gear and gaps. Missing polarity or coverage leaves totals
+unavailable; malformed recordings invalidate energy and peak values too.
+This measures pack electrical power, not motor or wheel output. No battery age,
+health percentage, range or charging ETA is inferred.
 
 ## Startup recording
 

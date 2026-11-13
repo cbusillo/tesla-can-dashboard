@@ -52,6 +52,15 @@ export type Analysis = {
   };
   battery: {
     quality: string;
+    currentDirection?: string;
+    energy?: {
+      drawnKwh: number | null;
+      regeneratedKwh: number | null;
+      peakDrawKw: number | null;
+      peakRegenKw: number | null;
+      coveredSeconds: number;
+      quality: string;
+    };
     signals: Record<string, Observation>;
     charging: {
       quality: string;
@@ -300,8 +309,13 @@ export function SessionAnalysis({
                 </p>
                 <p>
                   Compatibility with the recording's original setup has not been
-                  verified. Current direction is unverified. These readings do
-                  not establish battery health, age, range or charging ETA.
+                  verified.{" "}
+                  {(result.battery.currentDirection ?? "unqualified") ===
+                  "unqualified"
+                    ? "Current direction is unverified. "
+                    : "Battery power is positive when used and negative when regained. "}
+                  These readings do not establish battery health, age, range or
+                  charging ETA.
                 </p>
                 <p>
                   AC input energy covers{" "}
@@ -328,6 +342,37 @@ export function SessionAnalysis({
                 </section>
               ))}
               <h3>Battery and charging</h3>
+              {result.battery.energy &&
+                result.battery.energy.quality !== "unavailable" && (
+                  <>
+                    <dl className="session-observations">
+                      {[
+                        ["Energy used", result.battery.energy.drawnKwh, "kWh"],
+                        [
+                          "Energy regained",
+                          result.battery.energy.regeneratedKwh,
+                          "kWh",
+                        ],
+                        ["Peak draw", result.battery.energy.peakDrawKw, "kW"],
+                        ["Peak regen", result.battery.energy.peakRegenKw, "kW"],
+                      ].map(([label, value, unit]) => (
+                        <div key={String(label)}>
+                          <dt>{label}</dt>
+                          <dd>
+                            {observed(value as number | null, String(unit))}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p>
+                      {result.battery.energy.coveredSeconds.toFixed(0)} s
+                      recorded ·{" "}
+                      {result.battery.energy.quality === "partial"
+                        ? "Some readings missing"
+                        : "Estimated pack energy"}
+                    </p>
+                  </>
+                )}
               <p>
                 AC input energy ·{" "}
                 {observed(result.battery.charging.observedEnergyKwh, "kWh")} ·{" "}

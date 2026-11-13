@@ -28,9 +28,10 @@ class Engine:
         cell_count: int = 96,
         *,
         auto_record: bool = False,
+        discharge_current: str | None = None,
     ) -> None:
         self.interface = interface
-        self.decoder = Decoder(dbc)
+        self.decoder = Decoder(dbc, discharge_current=discharge_current)
         self.auto_record = auto_record
         self.recorder = recorder
         self.store = SignalStore(cell_count)
@@ -189,6 +190,7 @@ class Engine:
         else:
             snapshot = self.store.snapshot()
         snapshot["reloadRevision"] = self.revision
+        snapshot["currentDirection"] = self.decoder.current_direction
         snapshot["recording"] = self.recorder.status()
         return snapshot
 

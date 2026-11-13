@@ -160,7 +160,7 @@ def create_app(
 
     @app.get("/api/catalog")
     def catalog() -> dict:
-        return {"signals": [asdict(value) for value in CATALOG.values()], "currentDirection": "unqualified"}
+        return {"signals": [asdict(value) for value in CATALOG.values()], "currentDirection": engine.decoder.current_direction}
 
     @app.get("/api/battery-history")
     def battery_history(days: int = Query(default=30, ge=1, le=365)) -> dict:
