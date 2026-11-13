@@ -12,6 +12,16 @@ from tesla_can_dashboard.recording import Recorder
 from tesla_can_dashboard.signals import SignalStore
 
 
+@pytest.fixture
+def live_collector(tmp_path, monkeypatch) -> tuple[Engine, BatteryHistory]:
+    monkeypatch.setattr("tesla_can_dashboard.engine.SETTLE_SECONDS", 0)
+    engine = Engine("can0", Recorder(tmp_path / "recordings", reserve_bytes=0))
+    history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
+    engine.battery_history = history
+    engine.store.update({"fullPackEnergyKwh": 74}, {}, 1000)
+    return engine, history
+
+
 def test_history_survives_restart_without_turning_missing_or_stale_into_values(tmp_path) -> None:
     store = SignalStore(2)
     store.update({"fullPackEnergyKwh": 74, "currentA": None}, {1: 3.9}, 1000, now=0)
@@ -62,12 +72,8 @@ def test_history_recovers_file_created_before_first_schema_commit(tmp_path) -> N
     assert BatteryHistory(path, reserve_bytes=0).read(0)["observations"] == []
 
 
-def test_collector_uses_live_store_during_replay_without_requiring_raw_recording(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("tesla_can_dashboard.engine.SETTLE_SECONDS", 0)
-    engine = Engine("can0", Recorder(tmp_path / "recordings", reserve_bytes=0))
-    history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
-    engine.battery_history = history
-    engine.store.update({"fullPackEnergyKwh": 74}, {}, 1000)
+def test_collector_uses_live_store_during_replay_without_requiring_raw_recording(live_collector, monkeypatch) -> None:
+    engine, history = live_collector
     replay_store = SignalStore()
     engine.replay_store = replay_store
     replay_store.update({"fullPackEnergyKwh": 10}, {}, 1000)
@@ -82,12 +88,8 @@ def test_collector_uses_live_store_during_replay_without_requiring_raw_recording
     assert history.read(0)["observations"][0]["signals"]["fullPackEnergyKwh"] == 74
 
 
-def test_history_write_failure_leaves_live_measurements_available(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("tesla_can_dashboard.engine.SETTLE_SECONDS", 0)
-    engine = Engine("can0", Recorder(tmp_path / "recordings", reserve_bytes=0))
-    history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
-    engine.battery_history = history
-    engine.store.update({"fullPackEnergyKwh": 74}, {}, 1000)
+def test_history_write_failure_marks_failed_save(live_collector, monkeypatch) -> None:
+    engine, history = live_collector
 
     def fail_once(*_args: object) -> bool:
         engine.stop_event.set()
