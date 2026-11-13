@@ -1,0 +1,14 @@
+{
+  "qualityGate": {
+    "inspection": {
+      "prepare": {
+        "python": {
+          "version": "3.11",
+          "moduleName": "tesla-can-dashboard",
+          "testRoots": ["tests"],
+          "sync": true
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ export type Reading = {
 export type Session = { id: string; sizeBytes: number; modifiedAt: number };
 export type Snapshot = {
   mode: string;
+  currentDirection?: string;
   connection: {
     state: string;
     ageSeconds?: number | null;
@@ -22,6 +23,7 @@ export type Snapshot = {
   reloadRevision: string;
   recording: {
     activeId: string | null;
+    automaticMode?: string | null;
     error: string | null;
     sessions: Session[];
   };

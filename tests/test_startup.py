@@ -32,8 +32,9 @@ def test_auto_capture_storage_failure_keeps_cli_server_and_live_receiver(tmp_pat
     assert served
 
 
-def test_auto_capture_cannot_start_a_demonstration_recording(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["dashboard", "--record-on-start"])
+@pytest.mark.parametrize("mode", ["--record-on-start", "--record-drives"])
+def test_auto_capture_cannot_start_a_demonstration_recording(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    monkeypatch.setattr(sys, "argv", ["dashboard", mode])
     with pytest.raises(SystemExit) as failure:
         cli.main()
     assert failure.value.code != 0
