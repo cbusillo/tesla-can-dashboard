@@ -183,6 +183,55 @@ function ObservationCurve({
     </Suspense>
   );
 }
+function EnergyComparison({
+  first,
+  second,
+}: {
+  first: Analysis;
+  second: Analysis;
+}) {
+  function energy(result: Analysis) {
+    return result.quality !== "invalid" &&
+      result.battery.energy?.quality !== "unavailable"
+      ? result.battery.energy
+      : undefined;
+  }
+  const a = energy(first);
+  const b = energy(second);
+  return (
+    <section aria-label="Session comparison">
+      <h3>Comparison</h3>
+      <table className="session-comparison">
+        <thead>
+          <tr>
+            <th scope="col">Estimated</th>
+            <th scope="col">Selected session</th>
+            <th scope="col">Other session</th>
+          </tr>
+        </thead>
+        <tbody>
+          {([
+            ["Energy used", "drawnKwh", "kWh"],
+            ["Energy regained", "regeneratedKwh", "kWh"],
+            ["Peak draw", "peakDrawKw", "kW"],
+            ["Peak regen", "peakRegenKw", "kW"],
+            ["Driving data", "coveredSeconds", "s"],
+          ] as const).map(([label, key, unit]) => (
+            <tr key={key}>
+              <th scope="row">{label}</th>
+              <td>{observed(a?.[key] ?? null, unit)}</td>
+              <td>{observed(b?.[key] ?? null, unit)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(a?.quality === "partial" || b?.quality === "partial") && (
+        <p>Some readings missing.</p>
+      )}
+    </section>
+  );
+}
+
 export function SessionAnalysis({
   sessions,
   activeId,
@@ -194,22 +243,28 @@ export function SessionAnalysis({
 }) {
   const [selected, setSelected] = useState("");
   const [result, setResult] = useState<Analysis | null>(null);
+  const [compareWith, setCompareWith] = useState("");
+  const [comparison, setComparison] = useState<Analysis | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const available = sessions.filter((session) => session.id !== activeId);
   const exists = available.some((session) => session.id === selected);
+  const comparisonExists = available.some(
+    (session) => session.id === compareWith && session.id !== selected,
+  );
   useEffect(() => {
     controller.current?.abort();
     controller.current = null;
     setResult(null);
+    setComparison(null);
     setError("");
     setBusy(false);
     return () => {
       controller.current?.abort();
       controller.current = null;
     };
-  }, [selected, exists]);
+  }, [selected, exists, compareWith, comparisonExists]);
   async function analyze() {
     controller.current?.abort();
     const request = new AbortController();
@@ -217,24 +272,35 @@ export function SessionAnalysis({
     setBusy(true);
     setError("");
     setResult(null);
+    setComparison(null);
     const timeout = window.setTimeout(() => request.abort(), 30000);
     try {
-      const response = await fetch(
-        `/api/recordings/${encodeURIComponent(selected)}/analysis`,
-        { signal: request.signal },
-      );
-      const data = await response.json().catch(() => ({
-        detail: "Session analysis is unavailable. Try again.",
-      }));
-      if (!response.ok)
-        throw new Error(data.detail || "Session analysis failed");
-      if (!request.signal.aborted) setResult(data as Analysis);
+      async function review(identifier: string) {
+        const response = await fetch(
+          `/api/recordings/${encodeURIComponent(identifier)}/analysis`,
+          { signal: request.signal },
+        );
+        const data = await response.json().catch(() => ({
+          detail: "Session could not be reviewed. Try again.",
+        }));
+        if (!response.ok)
+          throw new Error(data.detail || "Session could not be reviewed");
+        return data as Analysis;
+      }
+      const data = await review(selected);
+      const other = comparisonExists ? await review(compareWith) : null;
+      if (!request.signal.aborted) {
+        setResult(data);
+        setComparison(other);
+      }
     } catch (failure) {
       if (controller.current === request) {
         setError(
           request.signal.aborted
-            ? "Analysis took too long. Wait for it to finish before trying again."
-            : String(failure),
+            ? "Review took too long. Wait for it to finish before trying again."
+            : failure instanceof Error
+              ? failure.message
+              : "Session could not be reviewed",
         );
       }
     } finally {
@@ -248,14 +314,17 @@ export function SessionAnalysis({
       aria-label="Recorded session analysis"
     >
       <header>
-        <h2>Session analysis</h2>
+        <h2>Session review</h2>
       </header>
       <div className="session-picker">
         <label>
           Completed recording
           <select
             value={exists ? selected : ""}
-            onChange={(event) => setSelected(event.currentTarget.value)}
+            onChange={(event) => {
+              setSelected(event.currentTarget.value);
+              setCompareWith("");
+            }}
           >
             <option value="">Choose a recording</option>
             {available.map((session) => (
@@ -271,9 +340,31 @@ export function SessionAnalysis({
           disabled={!exists || busy || activeId !== null}
           onClick={() => void analyze()}
         >
-          {busy ? "Analyzing…" : "Analyze"}
+          {busy ? "Reviewing…" : "Review"}
         </button>
       </div>
+      <details className="session-conventions">
+        <summary>Compare sessions</summary>
+        <div className="session-picker">
+          <label>
+            Other session
+            <select
+              aria-label="Other session"
+              value={comparisonExists ? compareWith : ""}
+              onChange={(event) => setCompareWith(event.currentTarget.value)}
+            >
+              <option value="">No comparison</option>
+              {available
+                .filter((session) => session.id !== selected)
+                .map((session) => (
+                  <option key={session.id} value={session.id}>
+                    {new Date(session.modifiedAt * 1000).toLocaleString()}
+                  </option>
+                ))}
+            </select>
+          </label>
+        </div>
+      </details>
       {available.length === 0 && (
         <p>Stop and save a recording to analyze it.</p>
       )}
@@ -293,6 +384,9 @@ export function SessionAnalysis({
           {result.quality === "invalid" && <p>{explain(result.reasons)}</p>}
           {result.quality !== "invalid" && (
             <>
+              {comparison && (
+                <EnergyComparison first={result} second={comparison} />
+              )}
               <details className="session-conventions">
                 <summary>Timing and data quality</summary>
                 <p>
@@ -375,8 +469,9 @@ export function SessionAnalysis({
                 )}
               <p>
                 AC input energy ·{" "}
-                {observed(result.battery.charging.observedEnergyKwh, "kWh")} ·{" "}
-                {result.battery.charging.quality}
+                {observed(result.battery.charging.observedEnergyKwh, "kWh")}
+                {result.battery.charging.quality === "partial" &&
+                  " · Some readings missing"}
               </p>
               <dl className="session-observations">
                 {Object.entries(result.battery.signals).map(([key, signal]) => (
@@ -387,12 +482,15 @@ export function SessionAnalysis({
                         <>
                           {observed(signal.first, signal.unit, units)} →{" "}
                           {observed(signal.last, signal.unit, units)}
-                          <small>
+                          <details className="session-reading-details">
+                            <summary>Details</summary>
+                            <small>
                             Observed{" "}
                             {observed(signal.minimum, signal.unit, units)} to{" "}
                             {observed(signal.maximum, signal.unit, units)} ·{" "}
                             {signal.samples} samples · {signal.quality}
-                          </small>
+                            </small>
+                          </details>
                         </>
                       ) : (
                         "Unavailable"
