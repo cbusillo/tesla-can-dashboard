@@ -237,7 +237,7 @@ export function History({
   for (let index = 0; index < points.length; index++) {
     const previous = points[index - 1],
       point = points[index];
-    if (previous && point[0] - previous[0] > staleAfter)
+    if (!samplesOnly && previous && point[0] - previous[0] > staleAfter)
       history.push([(previous[0] + staleAfter) * 1000, null]);
     history.push([
       point[0] * 1000,

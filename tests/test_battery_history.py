@@ -1,3 +1,4 @@
+import sqlite3
 import subprocess
 import sys
 import time
@@ -54,6 +55,12 @@ def test_reading_history_does_not_create_storage(tmp_path) -> None:
     path = tmp_path / "missing" / "battery.sqlite3"
     assert BatteryHistory(path, reserve_bytes=0).read(0)["observations"] == []
     assert not path.exists()
+
+
+def test_history_recovers_file_created_before_first_schema_commit(tmp_path) -> None:
+    path = tmp_path / "battery.sqlite3"
+    sqlite3.connect(path).close()
+    assert BatteryHistory(path, reserve_bytes=0).read(0)["observations"] == []
 
 
 def test_collector_uses_live_store_during_replay_without_requiring_raw_recording(tmp_path, monkeypatch) -> None:

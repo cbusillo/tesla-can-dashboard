@@ -22,11 +22,16 @@ def test_demo_is_labelled_replay_and_does_not_start_vehicle_recording(tmp_path) 
         assert client.post("/api/vehicle/command").status_code == 404
 
 
-def test_battery_history_queries_bound_days_and_do_not_record_demo(tmp_path) -> None:
+def test_battery_history_returns_recorded_summary_without_cell_arrays(tmp_path) -> None:
     engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
     with TestClient(create_app(engine, tmp_path)) as client:
-        assert client.get("/api/battery-history?days=7").json()["observations"] == []
-        assert not (tmp_path / "battery.sqlite3").exists()
+        engine.store.update({"fullPackEnergyKwh": 74}, {1: 3.9}, time.time())
+        engine.battery_history.append(engine.store.snapshot(), time.time())
+        response = client.get("/api/battery-history?days=7")
+        assert response.status_code == 200
+        saved = response.json()["observations"][0]
+        assert saved["signals"]["fullPackEnergyKwh"] == 74
+        assert "cellGroups" not in saved
 
 
 def test_layout_survives_restart_and_rejects_unknown_signals(tmp_path) -> None:

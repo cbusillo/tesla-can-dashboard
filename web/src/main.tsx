@@ -747,7 +747,7 @@ function App() {
                   <h2>Pack current history</h2>
                   <small>A · direction unverified</small>
                 </div>
-                {tab === "charging" && (
+              {tab === "charging" && !batteryHistory && (
                   <Suspense fallback={<p>Loading history…</p>}>
                     <History
                       reading={signals.currentA}

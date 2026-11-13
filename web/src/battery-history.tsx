@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { lazy, Suspense } from "preact/compat";
+import { lazy, memo, Suspense } from "preact/compat";
 import { api, type Reading } from "./types";
 
 const History = lazy(() =>
@@ -16,7 +16,7 @@ type Result = {
   error: string | null;
 };
 
-export function BatteryHistory({
+export const BatteryHistory = memo(function BatteryHistory({
   active,
   units,
   dark,
@@ -33,6 +33,7 @@ export function BatteryHistory({
     if (!active) return;
     let canceled = false;
     setLoading(true);
+    setError("");
     setData(null);
     api<Result>(`battery-history?days=${days}`)
       .then((result) => {
@@ -95,9 +96,7 @@ export function BatteryHistory({
       {loading ? (
         <p class="history-message">Loading history…</p>
       ) : !data?.count && (error || data?.error) ? null : !data?.count ? (
-        <p class="history-message">
-          History starts after 30 seconds of live readings.
-        </p>
+        <p class="history-message">No readings in this period.</p>
       ) : (
         <>
           <section class="history-panel">
@@ -152,4 +151,4 @@ export function BatteryHistory({
       )}
     </section>
   );
-}
+});

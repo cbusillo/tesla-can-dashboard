@@ -58,6 +58,8 @@ class BatteryHistory:
         if not self.path.exists():
             return result
         with closing(sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=rw", uri=True, timeout=0.2)) as connection:
+            if connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='observations'").fetchone() is None:
+                return result
             count, latest = connection.execute(
                 "SELECT count(*), max(id) FROM observations WHERE timestamp >= ?", (since,)
             ).fetchone()
