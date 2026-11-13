@@ -8,6 +8,8 @@ from typing import NamedTuple
 import cantools
 from cantools.database.can import Message, Signal
 
+from .signals import is_valid_signal
+
 SIGNAL_NAMES = {
     "BMS_dcLinkVoltage": "voltageV",
     "BMS_packCurrent": "currentA",
@@ -46,7 +48,10 @@ class MultiplexerHeader(NamedTuple):
 
 
 class Decoder:
-    def __init__(self, dbc: Path | None = None) -> None:
+    def __init__(self, dbc: Path | None = None, *, discharge_current: str | None = None) -> None:
+        if discharge_current not in {None, "positive", "negative"}:
+            raise ValueError("Choose positive or negative discharge current")
+        self.discharge_current = discharge_current
         database = None
         if dbc is not None:
             database = cantools.database.can.Database(strict=False)
@@ -70,21 +75,44 @@ class Decoder:
 
     def signal_keys(self, identifier: int) -> set[str]:
         if self.database is None:
-            return {"voltageV", "currentA"} if identifier == 0x132 else {"displayedChargePercent"} if identifier == 0x292 else set()
+            keys = {"voltageV", "currentA"} if identifier == 0x132 else {"displayedChargePercent"} if identifier == 0x292 else set()
+            return self._power_keys(keys)
         message = self.messages.get(identifier)
         if message is None:
             return set()
-        return {
-            SIGNAL_NAMES[signal.name]
-            for signal in message.signals
-            if signal.name in SIGNAL_NAMES and signal.unit in UNIT_FACTORS[SIGNAL_NAMES[signal.name]]
-        }
+        return self._power_keys(
+            {
+                SIGNAL_NAMES[signal.name]
+                for signal in message.signals
+                if signal.name in SIGNAL_NAMES and signal.unit in UNIT_FACTORS[SIGNAL_NAMES[signal.name]]
+            }
+        )
+
+    @property
+    def current_direction(self) -> str:
+        return f"{self.discharge_current}-discharge" if self.discharge_current else "unqualified"
+
+    def _power_keys(self, keys: set[str]) -> set[str]:
+        return keys | {"batteryPowerKw"} if self.discharge_current and {"voltageV", "currentA"} <= keys else keys
+
+    def _with_power(self, values: dict[str, float | None]) -> dict[str, float | None]:
+        if self.discharge_current and {"voltageV", "currentA"} <= values.keys():
+            voltage, current = values["voltageV"], values["currentA"]
+            values["batteryPowerKw"] = (
+                voltage * current / 1000 * (1 if self.discharge_current == "positive" else -1)
+                if voltage is not None
+                and current is not None
+                and is_valid_signal("voltageV", voltage)
+                and is_valid_signal("currentA", current)
+                else None
+            )
+        return values
 
     def decode(self, identifier: int, data: bytes) -> tuple[dict[str, float | None], dict[int, float | None]]:
         if identifier not in self.frame_ids:
             return {}, {}
         if self.database is None:
-            return self._basic(identifier, data), {}
+            return self._with_power(self._basic(identifier, data)), {}
         message = self.messages[identifier]
         if len(data) != message.length:
             raise ValueError("Wrong CAN frame length")
@@ -117,7 +145,7 @@ class Decoder:
             status = decoded.get(f"BMS_brickVoltageStatus{index}")
             factor = UNIT_FACTORS["voltageV"].get(signal.unit)
             cells[index] = number * factor if status == 2 and factor is not None and number is not None else None
-        return values, cells
+        return self._with_power(values), cells
 
     @staticmethod
     def _multiplexer_header(message: Message) -> MultiplexerHeader | None:

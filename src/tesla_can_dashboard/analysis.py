@@ -35,6 +35,8 @@ class Observation:
     previous: tuple[float, float] | None = None
     covered_seconds: float = 0
     integral: float = 0
+    positive_integral: float = 0
+    negative_integral: float = 0
     gaps: int = 0
     curve: list = field(default_factory=list)
     stride: int = 1
@@ -57,6 +59,14 @@ class Observation:
                 if 0 < gap <= maximum_gap:
                     self.covered_seconds += gap
                     self.integral += (previous_value + value) / 2 * gap
+                    if previous_value * value < 0:
+                        fraction = abs(previous_value) / (abs(previous_value) + abs(value))
+                        before = previous_value * gap * fraction / 2
+                        after = value * gap * (1 - fraction) / 2
+                    else:
+                        before, after = (previous_value + value) / 2 * gap, 0
+                    self.positive_integral += max(before, 0) + max(after, 0)
+                    self.negative_integral -= min(before, 0) + min(after, 0)
                 else:
                     self.gaps += 1
             self.previous = (seconds, value)
@@ -221,6 +231,8 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
     if path.stat().st_size > MAX_ANALYSIS_BYTES:
         raise AnalysisLimitError("Recording exceeds the analysis byte limit")
     observations = {key: Observation() for key in CATALOG if key not in {"speedKmh", "driveGear"}}
+    driving_power = Observation()
+    gear: tuple[float, float | None] | None = None
     performance = Performance()
     reasons: set[str] = set()
     first_ns = None
@@ -245,6 +257,15 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
                 reasons.add("decode_errors")
                 values = dict.fromkeys(decoder.signal_keys(frame.identifier))
             values = valid_values(values)
+            if "driveGear" in values:
+                gear = (seconds, values["driveGear"])
+                if values["driveGear"] != 4:
+                    driving_power.previous = None
+            if "batteryPowerKw" in values:
+                if gear is not None and gear[1] == 4 and seconds - gear[0] <= MAX_SPEED_GAP:
+                    driving_power.add(seconds, values["batteryPowerKw"], CATALOG["batteryPowerKw"].stale_after)
+                else:
+                    driving_power.previous = None
             performance.update(seconds, values)
             for key, value in values.items():
                 if key in observations:
@@ -266,6 +287,8 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
     reasons.update(performance.reasons)
     duration = (previous_ns - first_ns) / 1e9 if previous_ns is not None and first_ns is not None and not invalid else None
     power = observations["chargingPowerKw"]
+    battery_power = driving_power
+    energy_available = battery_power.covered_seconds > 0 and not invalid
     battery_signals = {key: observation.result(key) for key, observation in observations.items()}
     for signal in battery_signals.values():
         if invalid:
@@ -297,7 +320,21 @@ def analyze_recording(path: Path, decoder: Decoder) -> dict:
         "performance": performance.result(invalid),
         "battery": {
             "quality": "invalid" if invalid else "partial" if "interrupted_tail" in reasons else "observations-only",
-            "currentDirection": "unqualified",
+            "currentDirection": decoder.current_direction,
+            "energy": {
+                "drawnKwh": battery_power.positive_integral / 3600 if energy_available else None,
+                "regeneratedKwh": battery_power.negative_integral / 3600 if energy_available else None,
+                "peakDrawKw": max(0, battery_power.maximum) if battery_power.maximum is not None and not invalid else None,
+                "peakRegenKw": max(0, -battery_power.minimum) if battery_power.minimum is not None and not invalid else None,
+                "coveredSeconds": battery_power.covered_seconds if not invalid else 0,
+                "quality": "invalid"
+                if invalid
+                else "partial"
+                if battery_power.invalid or battery_power.gaps or "interrupted_tail" in reasons
+                else "estimated"
+                if energy_available
+                else "unavailable",
+            },
             "signals": battery_signals,
             "charging": {
                 "boundary": "charger-line; not pack energy or DC fast charging",

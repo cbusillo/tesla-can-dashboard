@@ -17,6 +17,7 @@ from .recording import Frame, Recorder, read_frames
 from .signals import SignalStore
 
 LOGGER = logging.getLogger(__name__)
+PARK_RECORDING_GRACE_SECONDS = 3
 
 
 class Engine:
@@ -28,11 +29,22 @@ class Engine:
         cell_count: int = 96,
         *,
         auto_record: bool = False,
+        discharge_current: str | None = None,
+        auto_drives: bool = False,
     ) -> None:
+        if auto_record and auto_drives:
+            raise ValueError("Choose startup recording or drive recording")
         self.interface = interface
-        self.decoder = Decoder(dbc)
+        self.decoder = Decoder(dbc, discharge_current=discharge_current)
         self.auto_record = auto_record
         self.recorder = recorder
+        self.auto_drives = auto_drives
+        self.drive_armed = True
+        self.drive_recording_id: str | None = None
+        self.park_since: float | None = None
+        if auto_drives and not any("driveGear" in self.decoder.signal_keys(key) for key in self.decoder.frame_ids):
+            self.auto_drives = False
+            recorder.last_error = "Drive recording needs a supported gear reading"
         self.store = SignalStore(cell_count)
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
@@ -119,15 +131,62 @@ class Engine:
     def ingest(self, frame: Frame) -> None:
         if frame.identifier not in self.decoder.frame_ids:
             return
-        self.recorder.append(frame)
         try:
             values, cells = self.decoder.decode(frame.identifier, frame.data)
         except (ValueError, cantools.database.errors.DecodeError):
+            self._append_recording(frame)
+            keys = self.decoder.signal_keys(frame.identifier)
+            if self.auto_drives:
+                self._update_drive_recording(frame, dict.fromkeys(keys))
             with self.store.lock:
                 self.store.decode_errors += 1
-            self.store.invalidate(self.decoder.signal_keys(frame.identifier), frame.timestamp, now=frame.monotonic_ns / 1e9)
+            self.store.invalidate(keys, frame.timestamp, now=frame.monotonic_ns / 1e9)
             return
+        if self.auto_drives:
+            self._update_drive_recording(frame, values)
+        self._append_recording(frame)
         self.store.update(values, cells, frame.timestamp, now=frame.monotonic_ns / 1e9)
+
+    def _append_recording(self, frame: Frame) -> None:
+        with self.recorder.lock:
+            automatic = self.drive_recording_id is not None and self.drive_recording_id == self.recorder.active_id
+            self.recorder.append(frame)
+            if automatic:
+                self.drive_recording_id = self.recorder.active_id
+
+    def _update_drive_recording(self, frame: Frame, values: dict[str, float | None]) -> None:
+        if "driveGear" not in values:
+            return
+        gear = values.get("driveGear")
+        if gear not in {1, 2, 3, 4}:
+            self.park_since = None
+            return
+        with self.recorder.lock:
+            if self.drive_recording_id != self.recorder.active_id:
+                self.drive_recording_id = None
+            if gear == 1:
+                self.drive_armed = True
+                if self.drive_recording_id is not None:
+                    now = frame.monotonic_ns / 1e9
+                    self.park_since = now if self.park_since is None else self.park_since
+                    if now - self.park_since >= PARK_RECORDING_GRACE_SECONDS:
+                        self.recorder.stop()
+                        self.drive_recording_id = None
+                return
+            self.park_since = None
+            if gear in {2, 4} and self.drive_armed and not self.recorder.analysis_ids:
+                self.drive_armed = False
+                if self.recorder.active_id is None:
+                    try:
+                        self.drive_recording_id = self.recorder.start()
+                    except (OSError, ValueError) as error:
+                        self.recorder.last_error = str(error) if isinstance(error, ValueError) else "Drive recording could not start"
+                        LOGGER.warning("Drive recording could not start; the live receiver will continue")
+
+    def recording_status(self) -> dict:
+        status = self.recorder.status()
+        status["automaticMode"] = "drives" if self.auto_drives else "startup" if self.auto_record else None
+        return status
 
     def _receive(self) -> None:
         while not self.stop_event.is_set():
@@ -189,7 +248,8 @@ class Engine:
         else:
             snapshot = self.store.snapshot()
         snapshot["reloadRevision"] = self.revision
-        snapshot["recording"] = self.recorder.status()
+        snapshot["currentDirection"] = self.decoder.current_direction
+        snapshot["recording"] = self.recording_status()
         return snapshot
 
     def analyze_session(self, session_id: str) -> dict:
