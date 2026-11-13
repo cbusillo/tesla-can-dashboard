@@ -32,8 +32,30 @@ def test_auto_capture_storage_failure_keeps_cli_server_and_live_receiver(tmp_pat
     assert served
 
 
-def test_auto_capture_cannot_start_a_demonstration_recording(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["dashboard", "--record-on-start"])
+@pytest.mark.parametrize("mode", ["--record-on-start", "--record-drives"])
+def test_auto_capture_cannot_start_a_demonstration_recording(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    monkeypatch.setattr(sys, "argv", ["dashboard", mode])
     with pytest.raises(SystemExit) as failure:
         cli.main()
     assert failure.value.code != 0
+
+
+def test_cli_drive_capture_accepts_a_live_interface(tmp_path: Path, telemetry_dbc: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["dashboard", "--interface", "synthetic", "--dbc", str(telemetry_dbc), "--record-drives", "--data-dir", str(tmp_path)],
+    )
+    monkeypatch.setattr(Engine, "_receive", lambda _: None)
+    served = []
+
+    def serve(app: FastAPI, host: str, port: int) -> None:
+        with TestClient(app) as client:
+            recording = client.get("/api/recordings").json()
+            assert recording["automaticMode"] == "drives"
+            assert recording["activeId"] is None
+            served.append((host, port))
+
+    monkeypatch.setattr("uvicorn.run", serve)
+    cli.main()
+    assert served

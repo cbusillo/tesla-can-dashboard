@@ -505,7 +505,9 @@ function App() {
                   {!editing && historyDefinition && (
                     <small>
                       {displayUnit(historyDefinition.unit, layout.units)}
-                      {historyKey === "currentA"
+                      {historyKey === "currentA" &&
+                      (data?.currentDirection ?? "unqualified") ===
+                        "unqualified"
                         ? " · direction unverified"
                         : ""}
                     </small>
@@ -745,9 +747,13 @@ function App() {
               <section class="history-panel">
                 <div class="section-heading">
                   <h2>Pack current history</h2>
-                  <small>A · direction unverified</small>
+                  <small>
+                    {(data?.currentDirection ?? "unqualified") === "unqualified"
+                      ? "A · direction unverified"
+                      : "A"}
+                  </small>
                 </div>
-              {tab === "charging" && !batteryHistory && (
+                {tab === "charging" && !batteryHistory && (
                   <Suspense fallback={<p>Loading history…</p>}>
                     <History
                       reading={signals.currentA}
@@ -804,7 +810,9 @@ function App() {
                 <h2>
                   {data?.recording.activeId
                     ? "Recording live telemetry"
-                    : "Record a drive or charge"}
+                    : data?.recording.automaticMode === "drives"
+                      ? "Ready for your next drive"
+                      : "Record a drive or charge"}
                 </h2>
               </ion-label>
               <ion-button
