@@ -19,6 +19,7 @@ def test_automatic_capture_skips_park_and_keeps_reverse_and_drive_together(tmp_p
     engine.ingest(gear(3, 1))
     engine.ingest(gear(3 + PARK_RECORDING_GRACE_SECONDS + 1, 1))
     assert recorder.active_id is None
+    assert isinstance(session, str)
     assert [frame.data[2] for frame in read_frames(recorder.path(session))] == [2, 4, 1]
 
 
