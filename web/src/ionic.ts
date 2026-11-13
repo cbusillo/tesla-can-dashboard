@@ -20,6 +20,8 @@ import { defineCustomElement as define23 } from "ionicons/components/ion-icon.js
 import { defineCustomElement as define30 } from "@ionic/core/components/ion-modal.js";
 import { defineCustomElement as define31 } from "@ionic/core/components/ion-input.js";
 import { defineCustomElement as define34 } from "@ionic/core/components/ion-checkbox.js";
+import { defineCustomElement as defineSegment } from "@ionic/core/components/ion-segment.js";
+import { defineCustomElement as defineSegmentButton } from "@ionic/core/components/ion-segment-button.js";
 export function defineComponents() {
   define0();
   define1();
@@ -43,4 +45,6 @@ export function defineComponents() {
   define30();
   define31();
   define34();
+  defineSegment();
+  defineSegmentButton();
 }

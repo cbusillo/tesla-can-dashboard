@@ -1,15 +1,18 @@
 import json
 import logging
 import socket
+import sqlite3
 import struct
 import threading
 import time
+import uuid
 from importlib.resources import files
 from pathlib import Path
 
 import cantools
 
 from .analysis import analyze_recording
+from .battery_history import INTERVAL_SECONDS, BatteryHistory
 from .decoder import Decoder
 from .recording import Frame, Recorder, read_frames
 from .signals import SignalStore
@@ -48,6 +51,8 @@ class Engine:
         self.revision = str(time.time_ns())
         self.started_at = time.monotonic()
         self.demo = self._load_demo() if interface is None else None
+        self.battery_history: BatteryHistory | None = None
+        self.history_thread: threading.Thread | None = None
 
     @staticmethod
     def _load_demo() -> dict:
@@ -71,6 +76,27 @@ class Engine:
             thread = threading.Thread(target=self._receive, daemon=True)
             self.thread = thread
             thread.start()
+            if self.battery_history is not None:
+                self.history_thread = threading.Thread(target=self._collect_battery_history, daemon=True)
+                self.history_thread.start()
+
+    def _collect_battery_history(self) -> None:
+        history = self.battery_history
+        assert history is not None
+        capture = uuid.uuid4().hex
+        next_observation = 0.0
+        while not self.stop_event.is_set():
+            if time.monotonic() >= next_observation:
+                try:
+                    if history.append(self.store.snapshot(), time.time(), capture):
+                        next_observation = time.monotonic() + INTERVAL_SECONDS
+                        history.error = None
+                except (OSError, sqlite3.Error):
+                    if history.error is None:
+                        LOGGER.exception("Battery history storage is unavailable; live acquisition will continue")
+                    history.error = "Battery history could not be saved"
+                    next_observation = time.monotonic() + INTERVAL_SECONDS
+            self.stop_event.wait(5)
 
     def close(self) -> None:
         self.stop_event.set()
@@ -80,6 +106,8 @@ class Engine:
             if self.thread:
                 self.thread.join(timeout=3)
             self.recorder.stop()
+            if self.history_thread:
+                self.history_thread.join(timeout=3)
 
     def ingest(self, frame: Frame) -> None:
         if frame.identifier not in self.decoder.frame_ids:

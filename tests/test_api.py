@@ -22,6 +22,15 @@ def test_demo_is_labelled_replay_and_does_not_start_vehicle_recording(tmp_path) 
         assert client.post("/api/vehicle/command").status_code == 404
 
 
+def test_battery_history_queries_bound_days_and_do_not_record_demo(tmp_path) -> None:
+    engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
+    with TestClient(create_app(engine, tmp_path)) as client:
+        assert client.get("/api/battery-history?days=7").json()["observations"] == []
+        assert client.get("/api/battery-history?days=0").status_code == 422
+        assert client.get("/api/battery-history?days=366").status_code == 422
+        assert not (tmp_path / "battery.sqlite3").exists()
+
+
 def test_layout_survives_restart_and_rejects_unknown_signals(tmp_path) -> None:
     for cycle in range(2):
         engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))

@@ -69,6 +69,19 @@ data-quality reasons and sampled battery curves. Operator profile identity,
 charging semantics and precision still require runtime qualification. Convenience
 controls are not implemented. No vehicle command endpoint exists.
 
+Charging → History shows recorded pack energy and cell balance. Live battery
+observations are saved every five minutes independently of raw CAN recording
+or browser activity, including fresh fields and available cell-group voltages.
+Replay and demonstration values never enter this history. A background writer
+keeps storage work off acquisition; a storage failure leaves live readings
+running and appears in History. Storage retains the newest 200,000 observations
+(about 23 months of continuous collection) without deleting raw recordings.
+Queries return at most 481 sampled observations, including the latest point.
+Charts show dots rather than inventing continuity across sleep or missing data.
+Dates follow the Pi clock; row-count retention does not delete data based on
+an offline clock jump. This history is not a health percentage or cell-age
+measurement. It begins after installation, rather than manufacturing older data.
+
 The dashboard does not provide portable internet or a hotspot setup. Browser
 availability while moving, sleep/wake behavior and touch performance require
 hands-on vehicle testing. Do not interact with the dashboard while driving.

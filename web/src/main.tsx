@@ -1,4 +1,5 @@
 import { render } from "preact";
+import { BatteryHistory } from "./battery-history";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { initialize } from "@ionic/core/components";
 import { addIcons } from "ionicons";
@@ -201,6 +202,7 @@ function App() {
     save,
   } = useDashboard();
   const [tab, setTab] = useState("instruments"),
+    [batteryHistory, setBatteryHistory] = useState(false),
     [editing, setEditing] = useState(false),
     [selectedCell, setSelectedCell] = useState<number | null>(1),
     [editKey, setEditKey] = useState<string | null>(null),
@@ -675,94 +677,119 @@ function App() {
         </Page>
         <Page name="charging" title="Charging" {...common}>
           <main class="charging-page">
-            <div class="screen-heading">
-              <div>
-                <h2>Battery charge</h2>
-              </div>
-              <div class={`charging-level ${charge?.quality || "unavailable"}`}>
-                <strong>{display(charge, layout.units)}</strong>
-                <small>{readingStatus(charge) || "State of charge"}</small>
-              </div>
-            </div>
-            <div
-              class={`charge-progress ${showCharge ? "" : "unknown"}`}
-              role="img"
-              aria-label={
-                showCharge
-                  ? `Charge ${charge.value}%`
-                  : "Charge progress unavailable"
+            <ion-segment
+              value={batteryHistory ? "history" : "now"}
+              aria-label="Battery view"
+              onionChange={(event: CustomEvent) =>
+                setBatteryHistory(event.detail.value === "history")
               }
             >
-              {showCharge && (
-                <span
-                  style={{
-                    width: `${Math.max(0, Math.min(100, charge.value!))}%`,
-                  }}
-                />
-              )}
-            </div>
-            <div class="metric-strip charging-metrics">
-              <Metric
-                label="Pack voltage"
-                reading={signals.voltageV}
-                units={layout.units}
-              />
-              <Metric
-                label="Pack current"
-                reading={signals.currentA}
-                units={layout.units}
-              />
-              <Metric
-                label="Remaining energy"
-                reading={signals.remainingEnergyKwh}
-                units={layout.units}
-              />
-              <Metric
-                label="Full pack energy"
-                reading={signals.fullPackEnergyKwh}
-                units={layout.units}
-              />
-            </div>
-            <section class="history-panel">
-              <div class="section-heading">
-                <h2>Pack current history</h2>
-                <small>A · direction unverified</small>
+              <ion-segment-button value="now">
+                <ion-label>Now</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="history">
+                <ion-label>History</ion-label>
+              </ion-segment-button>
+            </ion-segment>
+            <div hidden={batteryHistory}>
+              <div class="screen-heading">
+                <div>
+                  <h2>Battery charge</h2>
+                </div>
+                <div
+                  class={`charging-level ${charge?.quality || "unavailable"}`}
+                >
+                  <strong>{display(charge, layout.units)}</strong>
+                  <small>{readingStatus(charge) || "State of charge"}</small>
+                </div>
               </div>
-              {tab === "charging" && (
-                <Suspense fallback={<p>Loading history…</p>}>
-                  <History
-                    reading={signals.currentA}
-                    units={layout.units}
-                    dark={dark}
-                    label="Pack current"
-                    staleAfter={
-                      catalog.find((d) => d.key === "currentA")?.stale_after
-                    }
-                    height={130}
+              <div
+                class={`charge-progress ${showCharge ? "" : "unknown"}`}
+                role="img"
+                aria-label={
+                  showCharge
+                    ? `Charge ${charge.value}%`
+                    : "Charge progress unavailable"
+                }
+              >
+                {showCharge && (
+                  <span
+                    style={{
+                      width: `${Math.max(0, Math.min(100, charge.value!))}%`,
+                    }}
                   />
-                </Suspense>
-              )}
-            </section>
-            <div class="metric-strip charging-metrics">
-              <Metric
-                label="Lowest temperature"
-                reading={signals.minimumTemperatureC}
+                )}
+              </div>
+              <div class="metric-strip charging-metrics">
+                <Metric
+                  label="Pack voltage"
+                  reading={signals.voltageV}
+                  units={layout.units}
+                />
+                <Metric
+                  label="Pack current"
+                  reading={signals.currentA}
+                  units={layout.units}
+                />
+                <Metric
+                  label="Remaining energy"
+                  reading={signals.remainingEnergyKwh}
+                  units={layout.units}
+                />
+                <Metric
+                  label="Full pack energy"
+                  reading={signals.fullPackEnergyKwh}
+                  units={layout.units}
+                />
+              </div>
+              <section class="history-panel">
+                <div class="section-heading">
+                  <h2>Pack current history</h2>
+                  <small>A · direction unverified</small>
+                </div>
+                {tab === "charging" && (
+                  <Suspense fallback={<p>Loading history…</p>}>
+                    <History
+                      reading={signals.currentA}
+                      units={layout.units}
+                      dark={dark}
+                      label="Pack current"
+                      staleAfter={
+                        catalog.find((d) => d.key === "currentA")?.stale_after
+                      }
+                      height={130}
+                    />
+                  </Suspense>
+                )}
+              </section>
+              <div class="metric-strip charging-metrics">
+                <Metric
+                  label="Lowest temperature"
+                  reading={signals.minimumTemperatureC}
+                  units={layout.units}
+                />
+                <Metric
+                  label="Highest temperature"
+                  reading={signals.maximumTemperatureC}
+                  units={layout.units}
+                />
+                <Metric
+                  label="Charging power"
+                  reading={signals.chargingPowerKw}
+                  units={layout.units}
+                />
+                <Metric
+                  label="Charge limit"
+                  reading={signals.chargeLimitPercent}
+                  units={layout.units}
+                />
+              </div>
+            </div>
+            <div hidden={!batteryHistory}>
+              <BatteryHistory
+                active={tab === "charging" && batteryHistory}
                 units={layout.units}
-              />
-              <Metric
-                label="Highest temperature"
-                reading={signals.maximumTemperatureC}
-                units={layout.units}
-              />
-              <Metric
-                label="Charging power"
-                reading={signals.chargingPowerKw}
-                units={layout.units}
-              />
-              <Metric
-                label="Charge limit"
-                reading={signals.chargeLimitPercent}
-                units={layout.units}
+                dark={dark}
               />
             </div>
           </main>
