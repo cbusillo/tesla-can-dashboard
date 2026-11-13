@@ -753,7 +753,7 @@ function App() {
                       : "A"}
                   </small>
                 </div>
-              {tab === "charging" && !batteryHistory && (
+                {tab === "charging" && !batteryHistory && (
                   <Suspense fallback={<p>Loading history…</p>}>
                     <History
                       reading={signals.currentA}
@@ -810,7 +810,9 @@ function App() {
                 <h2>
                   {data?.recording.activeId
                     ? "Recording live telemetry"
-                    : "Record a drive or charge"}
+                    : data?.recording.automaticMode === "drives"
+                      ? "Ready for your next drive"
+                      : "Record a drive or charge"}
                 </h2>
               </ion-label>
               <ion-button

@@ -65,8 +65,16 @@ Completed recordings have a bounded analysis API for estimated acceleration,
 rolling intervals, quarter-mile timing and battery/charger-line observations.
 See [analysis conventions and signal coverage](docs/session-analysis.md).
 Use `--record-on-start` with a live `--interface` to capture at server startup
-without opening the browser. Existing recordings and storage limits are kept;
-a capture-start failure leaves the receiver/server running. The existing
+without opening the browser. Existing recordings and storage limits are kept.
+Alternatively, `--record-drives` starts when decoded gear enters Reverse or
+Drive and closes its own capture after settled Park. This avoids spending the
+raw budget on parked time. Manual captures are preserved; manual Stop stays
+paused until Park rearms the next drive. Analysis admission defers a new capture
+until analysis releases it. Both automatic modes require a live receiver and
+cannot be combined. Missing gear support leaves the dashboard running with a
+recording error. Neither mode erases older captures; choose a bounded storage
+budget with `--recording-limit-mib` and export/remove recordings deliberately.
+A capture-start failure leaves the receiver/server running. The existing
 recorder rolls into completed chunks within the analysis limits and reports
 a full total budget without erasing older files.
 Sessions includes recording analysis with explicit measurement conventions,

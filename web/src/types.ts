@@ -23,6 +23,7 @@ export type Snapshot = {
   reloadRevision: string;
   recording: {
     activeId: string | null;
+    automaticMode?: string | null;
     error: string | null;
     sessions: Session[];
   };

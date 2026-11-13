@@ -207,11 +207,11 @@ def create_app(
     @app.post("/api/recordings/stop")
     def stop_recording() -> dict:
         engine.recorder.stop()
-        return engine.recorder.status()
+        return engine.recording_status()
 
     @app.get("/api/recordings")
     def recordings() -> dict:
-        return engine.recorder.status()
+        return engine.recording_status()
 
     @app.get("/api/recordings/{session_id}/analysis")
     def analyze_session(session_id: str) -> dict:
