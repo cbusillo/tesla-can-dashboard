@@ -26,7 +26,9 @@ def test_battery_history_returns_recorded_summary_without_cell_arrays(tmp_path) 
     engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
     with TestClient(create_app(engine, tmp_path)) as client:
         engine.store.update({"fullPackEnergyKwh": 74}, {1: 3.9}, time.time())
-        engine.battery_history.append(engine.store.snapshot(), time.time())
+        history = engine.battery_history
+        assert history is not None
+        history.append(engine.store.snapshot(), time.time())
         response = client.get("/api/battery-history?days=7")
         assert response.status_code == 200
         saved = response.json()["observations"][0]

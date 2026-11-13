@@ -76,8 +76,9 @@ class Engine:
             self.thread = thread
             thread.start()
             if self.battery_history is not None:
-                self.history_thread = threading.Thread(target=self._collect_battery_history, daemon=True)
-                self.history_thread.start()
+                history_thread = threading.Thread(target=self._collect_battery_history, daemon=True)
+                self.history_thread = history_thread
+                history_thread.start()
 
     def _collect_battery_history(self) -> None:
         history = self.battery_history

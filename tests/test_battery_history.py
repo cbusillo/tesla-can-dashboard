@@ -1,12 +1,11 @@
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
 
-from tesla_can_dashboard import battery_history as history_module
-from tesla_can_dashboard import engine as engine_module
 from tesla_can_dashboard.battery_history import BatteryHistory
 from tesla_can_dashboard.engine import Engine
 from tesla_can_dashboard.recording import Recorder
@@ -64,36 +63,39 @@ def test_history_recovers_file_created_before_first_schema_commit(tmp_path) -> N
 
 
 def test_collector_uses_live_store_during_replay_without_requiring_raw_recording(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(engine_module, "SETTLE_SECONDS", 0)
+    monkeypatch.setattr("tesla_can_dashboard.engine.SETTLE_SECONDS", 0)
     engine = Engine("can0", Recorder(tmp_path / "recordings", reserve_bytes=0))
-    engine.battery_history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
+    history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
+    engine.battery_history = history
     engine.store.update({"fullPackEnergyKwh": 74}, {}, 1000)
-    engine.replay_store = SignalStore()
-    engine.replay_store.update({"fullPackEnergyKwh": 10}, {}, 1000)
-    append = engine.battery_history.append
+    replay_store = SignalStore()
+    engine.replay_store = replay_store
+    replay_store.update({"fullPackEnergyKwh": 10}, {}, 1000)
+    append = history.append
 
     def collect_once(snapshot: dict, timestamp: float) -> bool:
         engine.stop_event.set()
         return append(snapshot, timestamp)
 
-    monkeypatch.setattr(engine.battery_history, "append", collect_once)
+    monkeypatch.setattr(history, "append", collect_once)
     engine._collect_battery_history()
-    assert engine.battery_history.read(0)["observations"][0]["signals"]["fullPackEnergyKwh"] == 74
+    assert history.read(0)["observations"][0]["signals"]["fullPackEnergyKwh"] == 74
 
 
 def test_history_write_failure_leaves_live_measurements_available(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(engine_module, "SETTLE_SECONDS", 0)
+    monkeypatch.setattr("tesla_can_dashboard.engine.SETTLE_SECONDS", 0)
     engine = Engine("can0", Recorder(tmp_path / "recordings", reserve_bytes=0))
-    engine.battery_history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
+    history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
+    engine.battery_history = history
     engine.store.update({"fullPackEnergyKwh": 74}, {}, 1000)
 
     def fail_once(*_args: object) -> bool:
         engine.stop_event.set()
         raise OSError("storage unavailable")
 
-    monkeypatch.setattr(engine.battery_history, "append", fail_once)
+    monkeypatch.setattr(history, "append", fail_once)
     engine._collect_battery_history()
-    assert engine.battery_history.error
+    assert history.error
 
 
 def test_replay_or_disconnected_observations_never_enter_history(tmp_path) -> None:
@@ -111,9 +113,10 @@ def test_collector_waits_for_wake_readings_to_settle(tmp_path, monkeypatch) -> N
     clock = [0.0]
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
     engine = Engine("can0", Recorder(tmp_path / "recordings", reserve_bytes=0), cell_count=2)
-    engine.battery_history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
+    history = BatteryHistory(tmp_path / "battery.sqlite3", reserve_bytes=0)
+    engine.battery_history = history
     engine.store.update({"voltageV": 380}, {}, 1000, now=0)
-    append = engine.battery_history.append
+    append = history.append
 
     def collect_once(snapshot: dict, timestamp: float) -> bool:
         engine.stop_event.set()
@@ -126,10 +129,11 @@ def test_collector_waits_for_wake_readings_to_settle(tmp_path, monkeypatch) -> N
             engine.store.update({"fullPackEnergyKwh": 74}, {1: 3.9, 2: 3.91}, 1000 + clock[0])
         return engine.stop_event.is_set()
 
-    monkeypatch.setattr(engine.battery_history, "append", collect_once)
-    monkeypatch.setattr(engine.stop_event, "wait", wake_updates)
+    monkeypatch.setattr(history, "append", collect_once)
+    stop_event: threading.Event = engine.stop_event
+    monkeypatch.setattr(stop_event, "wait", wake_updates)
     engine._collect_battery_history()
-    rows = engine.battery_history.read(0)["observations"]
+    rows = history.read(0)["observations"]
     assert len(rows) == 1
     assert rows[0]["signals"]["fullPackEnergyKwh"] == 74
     assert rows[0]["cellSpreadMv"] is not None
@@ -140,7 +144,7 @@ def test_history_leaves_existing_data_untouched_when_storage_reserve_is_reached(
     store = SignalStore()
     store.update({"fullPackEnergyKwh": 74}, {}, 1000, now=0)
     history.append(store.snapshot(now=0), 1000)
-    monkeypatch.setattr(history_module, "has_storage_space", lambda *_args: False)
+    monkeypatch.setattr("tesla_can_dashboard.battery_history.has_storage_space", lambda *_args: False)
     with pytest.raises(OSError):
         history.append(store.snapshot(now=0), 1001)
     assert [row["timestamp"] for row in history.read(0)["observations"]] == [1000]
