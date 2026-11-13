@@ -78,8 +78,12 @@ A capture-start failure leaves the receiver/server running. The existing
 recorder rolls into completed chunks within the analysis limits and reports
 a full total budget without erasing older files.
 Sessions includes recording analysis with explicit measurement conventions,
-data-quality reasons and sampled battery curves. Operator profile identity,
-charging semantics and precision still require runtime qualification. Convenience
+data-quality reasons and sampled battery curves.
+Sessions → Review can compare two saved sessions for estimated energy used,
+energy regained, peak draw/regen and driving-data coverage. Compare sessions
+and per-reading details stay collapsed until requested. Recording chunks are
+compared as saved; the table does not claim to combine them into whole trips.
+Operator profile identity, charging semantics and precision still require runtime qualification. Convenience
 controls are not implemented. No vehicle command endpoint exists.
 
 Charging → History shows recorded pack energy and cell balance. Live battery
