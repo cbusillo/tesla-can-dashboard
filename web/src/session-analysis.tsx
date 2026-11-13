@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { Chart } from "./charts";
+import { lazy, Suspense } from "preact/compat";
+const Chart = lazy(() =>
+  import("./charts").then((module) => ({ default: module.Chart })),
+);
 import { convert, displayUnit, type Session } from "./types";
 import "./session-analysis.css";
 
@@ -138,35 +141,37 @@ function ObservationCurve({
   const muted = style.getPropertyValue("--muted").trim() || style.color;
   const accent = style.getPropertyValue("--accent").trim() || style.color;
   return (
-    <Chart
-      label={`${label} over time`}
-      height={160}
-      option={{
-        grid: { left: 50, right: 16, top: 20, bottom: 35 },
-        tooltip: { trigger: "item", renderMode: "richText", confine: true },
-        xAxis: { type: "value", name: "s", axisLabel: { color: muted } },
-        yAxis: {
-          type: "value",
-          scale: true,
-          name: displayUnit(signal.unit, units),
-          axisLabel: { color: muted },
-        },
-        series: [
-          {
-            type: "line",
-            data: signal.curve.map(([seconds, value]) => [
-              seconds,
-              value === null ? null : convert(value, signal.unit, units),
-            ]),
-            showSymbol: true,
-            symbolSize: 4,
-            connectNulls: false,
-            lineStyle: { opacity: 0 },
-            itemStyle: { color: accent },
+    <Suspense fallback={<p>Loading chart…</p>}>
+      <Chart
+        label={`${label} over time`}
+        height={160}
+        option={{
+          grid: { left: 50, right: 16, top: 20, bottom: 35 },
+          tooltip: { trigger: "item", renderMode: "richText", confine: true },
+          xAxis: { type: "value", name: "s", axisLabel: { color: muted } },
+          yAxis: {
+            type: "value",
+            scale: true,
+            name: displayUnit(signal.unit, units),
+            axisLabel: { color: muted },
           },
-        ],
-      }}
-    />
+          series: [
+            {
+              type: "line",
+              data: signal.curve.map(([seconds, value]) => [
+                seconds,
+                value === null ? null : convert(value, signal.unit, units),
+              ]),
+              showSymbol: true,
+              symbolSize: 4,
+              connectNulls: false,
+              lineStyle: { opacity: 0 },
+              itemStyle: { color: accent },
+            },
+          ],
+        }}
+      />
+    </Suspense>
   );
 }
 export function SessionAnalysis({

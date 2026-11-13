@@ -44,11 +44,7 @@ import {
   type Snapshot,
 } from "./types";
 import { Metric, Page } from "./dashboard";
-const SessionAnalysis = lazy(() =>
-  import("./session-analysis").then((module) => ({
-    default: module.SessionAnalysis,
-  })),
-);
+import { SessionAnalysis } from "./session-analysis";
 import "./style.css";
 initialize({ mode: "ios", animated: false });
 addIcons({
@@ -206,7 +202,6 @@ function App() {
   } = useDashboard();
   const [tab, setTab] = useState("instruments"),
     [editing, setEditing] = useState(false),
-    [sessionsOpened, setSessionsOpened] = useState(false),
     [selectedCell, setSelectedCell] = useState<number | null>(1),
     [editKey, setEditKey] = useState<string | null>(null),
     [rangeMin, setRangeMin] = useState(""),
@@ -218,6 +213,9 @@ function App() {
       matchMedia("(prefers-color-scheme: dark)").matches,
     );
   const historyKey = layout.historyInstrument;
+  const displayedInstruments = layout.instruments.filter((key) =>
+    catalog.some((definition) => definition.key === key),
+  );
   const dark =
     layout.theme === "night" || (layout.theme === "auto" && deviceDark);
   useEffect(() => {
@@ -384,7 +382,6 @@ function App() {
       <ion-tabs
         onionTabsDidChange={(event) => {
           setTab(event.detail.tab);
-          if (event.detail.tab === "sessions") setSessionsOpened(true);
           closeEditing();
         }}
       >
@@ -400,16 +397,13 @@ function App() {
                 if (editing) closeEditing();
                 else setEditing(true);
               }}
-              aria-pressed={editing}
-              aria-label={
-                editing ? "Finish editing instruments" : "Edit instruments"
-              }
             >
               {editing ? "Done" : "Edit"}
             </ion-button>
           }
         >
           <main class="overview">
+            {!catalog.length && <p role="status">Loading instruments…</p>}
             <div class="charge-context">
               <div class="charge-level">
                 <ion-icon name="battery-half-outline" aria-hidden="true" />
@@ -463,13 +457,13 @@ function App() {
               (layout.presentation === "dials" ? (
                 <>
                   <div class="cluster">
-                    {layout.instruments
+                    {displayedInstruments
                       .slice(0, 2)
                       .map((key) => instrument(key, true))}
                   </div>
-                  {!!layout.instruments.slice(2).length && (
+                  {!!displayedInstruments.slice(2).length && (
                     <div class="metric-strip selected-metrics">
-                      {layout.instruments.slice(2).map((key) => (
+                      {displayedInstruments.slice(2).map((key) => (
                         <Metric
                           key={key}
                           label={instrumentLabel(key)}
@@ -495,7 +489,7 @@ function App() {
                 </>
               ) : (
                 <div class="instrument-grid">
-                  {layout.instruments.map((key) => instrument(key))}
+                  {displayedInstruments.map((key) => instrument(key))}
                 </div>
               ))}
             {layout.presentation !== "history" && (
@@ -506,6 +500,14 @@ function App() {
                       ? `${historyDefinition.label} history`
                       : "Recent history"}
                   </h2>
+                  {!editing && historyDefinition && (
+                    <small>
+                      {displayUnit(historyDefinition.unit, layout.units)}
+                      {historyKey === "currentA"
+                        ? " · direction unverified"
+                        : ""}
+                    </small>
+                  )}
                   {editing && (
                     <label class="compact-select">
                       <span class="sr-only">History instrument</span>
@@ -529,7 +531,7 @@ function App() {
                     </label>
                   )}
                 </div>
-                {tab === "instruments" && (
+                {tab === "instruments" && historyDefinition && (
                   <Suspense fallback={<p>Loading history…</p>}>
                     <History
                       reading={signals[historyKey]}
@@ -862,15 +864,11 @@ function App() {
           {!data?.recording.sessions.length && (
             <p class="ion-padding">No recordings</p>
           )}
-          {sessionsOpened && (
-            <Suspense fallback={<p class="ion-padding">Loading recordings…</p>}>
-              <SessionAnalysis
-                sessions={data?.recording.sessions || []}
-                activeId={data?.recording.activeId || null}
-                units={layout.units}
-              />
-            </Suspense>
-          )}
+          <SessionAnalysis
+            sessions={data?.recording.sessions || []}
+            activeId={data?.recording.activeId || null}
+            units={layout.units}
+          />
         </Page>
         <Page name="settings" title="Settings" {...common}>
           <main class="settings-page">

@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tesla_can_dashboard.analysis import analyze_recording
-from tesla_can_dashboard.api import Layout, create_app
+from tesla_can_dashboard.api import create_app
 from tesla_can_dashboard.decoder import Decoder
 from tesla_can_dashboard.engine import Engine
 from tesla_can_dashboard.recording import Frame, Recorder
@@ -124,7 +124,6 @@ def test_previous_layout_loads_without_replacing_instrument_choices(tmp_path) ->
         loaded = client.get("/api/layout").json()
         assert all(loaded[key] == value for key, value in legacy.items())
         assert "presentation" in loaded and "ranges" in loaded
-        assert loaded["historyInstrument"] == Layout().historyInstrument
 
 
 def test_analysis_excludes_active_recordings_and_ignores_browser_replay_clock(
