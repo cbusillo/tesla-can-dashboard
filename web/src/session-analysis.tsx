@@ -66,7 +66,8 @@ const labels: Record<string, string> = {
   "quarter-mile": "Quarter mile",
 };
 const reasons: Record<string, string> = {
-  interrupted_tail: "The recording ended before the final reading",
+  interrupted_tail:
+    "The last reading was incomplete and left out; earlier readings were kept",
   non_forward_gear: "Park or Neutral interrupted measurement",
   missing_speed: "No supported speed samples",
   unknown_direction: "Forward travel was not confirmed",

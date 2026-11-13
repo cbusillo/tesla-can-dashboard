@@ -150,6 +150,7 @@ ion-button {
 }
 .instrument-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -187,6 +188,7 @@ ion-tab-button ion-label {
 }
 .charge-context {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   min-height: 48px;

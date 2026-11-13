@@ -42,6 +42,7 @@ export type Layout = {
   units: "metric" | "imperial";
   instruments: string[];
   presentation: "dials" | "readings" | "history";
+  historyInstrument: string;
   ranges: Record<string, DialRange>;
 };
 export const initialLayout: Layout = {
@@ -49,6 +50,7 @@ export const initialLayout: Layout = {
   units: "metric",
   instruments: ["voltageV", "currentA", "displayedChargePercent"],
   presentation: "dials",
+  historyInstrument: "voltageV",
   ranges: {},
 };
 export function convert(value: number, unit: string, units: string) {
