@@ -941,6 +941,14 @@ function App() {
                 </ion-select>
               </ion-item>
             </ion-list>
+            <ion-list-header>
+              <ion-label>Connection</ion-label>
+            </ion-list-header>
+            <ion-list>
+              <ion-item href="https://checkip.amazonaws.com/" target="_self" rel="noreferrer" detail>
+                <ion-label>Open internet test page</ion-label>
+              </ion-item>
+            </ion-list>
           </main>
         </Page>
         <ion-tab-bar slot="bottom">
