@@ -36,6 +36,7 @@ class Layout(BaseModel):
     units: Literal["metric", "imperial"] = "metric"
     instruments: list[str] = Field(default_factory=lambda: ["voltageV", "currentA", "displayedChargePercent"], max_length=12)
     presentation: Literal["dials", "readings", "history"] = "dials"
+    historyInstrument: str = "voltageV"
     ranges: dict[str, DialRange] = Field(default_factory=dict, max_length=12)
 
     @field_validator("instruments")
@@ -50,6 +51,13 @@ class Layout(BaseModel):
     def known_ranges(cls, value: dict[str, DialRange]) -> dict[str, DialRange]:
         if any(key not in CATALOG for key in value):
             raise ValueError("Choose dial ranges for known instruments")
+        return value
+
+    @field_validator("historyInstrument")
+    @classmethod
+    def known_history_instrument(cls, value: str) -> str:
+        if value not in CATALOG:
+            raise ValueError("Choose a known instrument for history")
         return value
 
 

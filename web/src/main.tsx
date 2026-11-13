@@ -201,6 +201,7 @@ function App() {
     save,
   } = useDashboard();
   const [tab, setTab] = useState("instruments"),
+    [editing, setEditing] = useState(false),
     [selectedCell, setSelectedCell] = useState<number | null>(1),
     [editKey, setEditKey] = useState<string | null>(null),
     [rangeMin, setRangeMin] = useState(""),
@@ -211,7 +212,10 @@ function App() {
     [deviceDark, setDeviceDark] = useState(
       matchMedia("(prefers-color-scheme: dark)").matches,
     );
-  const [historyKey, setHistoryKey] = useState("voltageV");
+  const historyKey = layout.historyInstrument;
+  const displayedInstruments = layout.instruments.filter((key) =>
+    catalog.some((definition) => definition.key === key),
+  );
   const dark =
     layout.theme === "night" || (layout.theme === "auto" && deviceDark);
   useEffect(() => {
@@ -294,10 +298,17 @@ function App() {
     layout.units,
   );
   const historyDefinition = catalog.find((d) => d.key === historyKey);
+  const instrumentLabel = (key: string) =>
+    catalog.find((definition) => definition.key === key)?.label || "Instrument";
+  function closeEditing() {
+    setEditing(false);
+    setChooseOpen(false);
+    setEditKey(null);
+  }
   function instrument(key: string, dial = false) {
     const definition = catalog.find((d) => d.key === key),
       reading = signals[key];
-    const label = definition?.label || key;
+    const label = instrumentLabel(key);
     return (
       <section
         class={`instrument ${reading?.quality || "unavailable"}`}
@@ -305,13 +316,15 @@ function App() {
       >
         <div class="instrument-heading">
           <h2>{label}</h2>
-          <ion-button
-            fill="clear"
-            onClick={() => openRange(key)}
-            aria-label={`Configure ${label}`}
-          >
-            <ion-icon name="options-outline" slot="icon-only" />
-          </ion-button>
+          {editing && (
+            <ion-button
+              fill="clear"
+              onClick={() => openRange(key)}
+              aria-label={`Configure ${label}`}
+            >
+              <ion-icon name="options-outline" slot="icon-only" />
+            </ion-button>
+          )}
         </div>
         {dial ? (
           <Suspense fallback={<div class="chart-loading">Loading dial…</div>}>
@@ -366,22 +379,31 @@ function App() {
           )}
         </div>
       )}
-      <ion-tabs onionTabsDidChange={(event) => setTab(event.detail.tab)}>
+      <ion-tabs
+        onionTabsDidChange={(event) => {
+          setTab(event.detail.tab);
+          closeEditing();
+        }}
+      >
         <Page
           name="instruments"
           title="Overview"
           {...common}
           toolbar={
             <ion-button
+              class="edit-toggle"
               fill="clear"
-              onClick={() => setChooseOpen(true)}
-              aria-label="Choose instruments"
+              onClick={() => {
+                if (editing) closeEditing();
+                else setEditing(true);
+              }}
             >
-              <ion-icon slot="icon-only" name="options-outline" />
+              {editing ? "Done" : "Edit"}
             </ion-button>
           }
         >
           <main class="overview">
+            {!catalog.length && <p role="status">Loading instruments…</p>}
             <div class="charge-context">
               <div class="charge-level">
                 <ion-icon name="battery-half-outline" aria-hidden="true" />
@@ -391,29 +413,41 @@ function App() {
                   <small>{readingStatus(charge)}</small>
                 )}
               </div>
-              <label class="compact-select">
-                <span class="sr-only">Instrument display</span>
-                <select
-                  aria-label="Instrument display"
-                  value={layout.presentation}
-                  disabled={busy}
-                  onChange={(e) =>
-                    save({
-                      ...layout,
-                      presentation: e.currentTarget
-                        .value as Layout["presentation"],
-                    })
-                  }
-                >
-                  <option value="dials">Dials</option>
-                  <option value="readings">Readings</option>
-                  <option value="history">History</option>
-                </select>
-              </label>
+              {editing && (
+                <div class="instrument-tools">
+                  {layout.instruments.length > 0 && (
+                    <ion-button
+                      fill="clear"
+                      onClick={() => setChooseOpen(true)}
+                    >
+                      Choose instruments
+                    </ion-button>
+                  )}
+                  <label class="compact-select">
+                    <span class="sr-only">Instrument display</span>
+                    <select
+                      aria-label="Instrument display"
+                      value={layout.presentation}
+                      disabled={busy}
+                      onChange={(e) =>
+                        save({
+                          ...layout,
+                          presentation: e.currentTarget
+                            .value as Layout["presentation"],
+                        })
+                      }
+                    >
+                      <option value="dials">Dials</option>
+                      <option value="readings">Readings</option>
+                      <option value="history">History</option>
+                    </select>
+                  </label>
+                </div>
+              )}
             </div>
             {!layout.instruments.length && (
               <div class="empty">
-                <p>Choose the signals you want to watch.</p>
+                <p>Add an instrument.</p>
                 <ion-button onClick={() => setChooseOpen(true)}>
                   Choose instruments
                 </ion-button>
@@ -423,28 +457,31 @@ function App() {
               (layout.presentation === "dials" ? (
                 <>
                   <div class="cluster">
-                    {layout.instruments
+                    {displayedInstruments
                       .slice(0, 2)
                       .map((key) => instrument(key, true))}
                   </div>
-                  {!!layout.instruments.slice(2).length && (
+                  {!!displayedInstruments.slice(2).length && (
                     <div class="metric-strip selected-metrics">
-                      {layout.instruments.slice(2).map((key) => (
+                      {displayedInstruments.slice(2).map((key) => (
                         <Metric
                           key={key}
-                          label={
-                            catalog.find((d) => d.key === key)?.label || key
-                          }
+                          label={instrumentLabel(key)}
                           reading={signals[key]}
                           units={layout.units}
                         >
-                          <ion-button
-                            fill="clear"
-                            onClick={() => openRange(key)}
-                            aria-label={`Configure ${catalog.find((d) => d.key === key)?.label || key}`}
-                          >
-                            <ion-icon name="options-outline" slot="icon-only" />
-                          </ion-button>
+                          {editing && (
+                            <ion-button
+                              fill="clear"
+                              onClick={() => openRange(key)}
+                              aria-label={`Configure ${instrumentLabel(key)}`}
+                            >
+                              <ion-icon
+                                name="options-outline"
+                                slot="icon-only"
+                              />
+                            </ion-button>
+                          )}
                         </Metric>
                       ))}
                     </div>
@@ -452,35 +489,55 @@ function App() {
                 </>
               ) : (
                 <div class="instrument-grid">
-                  {layout.instruments.map((key) => instrument(key))}
+                  {displayedInstruments.map((key) => instrument(key))}
                 </div>
               ))}
             {layout.presentation !== "history" && (
               <section class="history-panel">
                 <div class="section-heading">
-                  <h2>Recent history</h2>
-                  <label class="compact-select">
-                    <span class="sr-only">History signal</span>
-                    <select
-                      aria-label="History signal"
-                      value={historyKey}
-                      onChange={(e) => setHistoryKey(e.currentTarget.value)}
-                    >
-                      {catalog.map((d) => (
-                        <option value={d.key} key={d.key}>
-                          {d.label} ({displayUnit(d.unit, layout.units)})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <h2>
+                    {historyDefinition
+                      ? `${historyDefinition.label} history`
+                      : "Recent history"}
+                  </h2>
+                  {!editing && historyDefinition && (
+                    <small>
+                      {displayUnit(historyDefinition.unit, layout.units)}
+                      {historyKey === "currentA"
+                        ? " · direction unverified"
+                        : ""}
+                    </small>
+                  )}
+                  {editing && (
+                    <label class="compact-select">
+                      <span class="sr-only">History instrument</span>
+                      <select
+                        aria-label="History instrument"
+                        value={historyKey}
+                        disabled={busy}
+                        onChange={(e) =>
+                          save({
+                            ...layout,
+                            historyInstrument: e.currentTarget.value,
+                          })
+                        }
+                      >
+                        {catalog.map((d) => (
+                          <option value={d.key} key={d.key}>
+                            {d.label} ({displayUnit(d.unit, layout.units)})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
-                {tab === "instruments" && (
+                {tab === "instruments" && historyDefinition && (
                   <Suspense fallback={<p>Loading history…</p>}>
                     <History
                       reading={signals[historyKey]}
                       units={layout.units}
                       dark={dark}
-                      label={historyDefinition?.label || historyKey}
+                      label={instrumentLabel(historyKey)}
                       staleAfter={historyDefinition?.stale_after}
                       height={80}
                     />
@@ -621,7 +678,6 @@ function App() {
             <div class="screen-heading">
               <div>
                 <h2>Battery charge</h2>
-                <p>Pack current uses the CAN sign.</p>
               </div>
               <div class={`charging-level ${charge?.quality || "unavailable"}`}>
                 <strong>{display(charge, layout.units)}</strong>
@@ -652,7 +708,7 @@ function App() {
                 units={layout.units}
               />
               <Metric
-                label="Current (CAN sign)"
+                label="Pack current"
                 reading={signals.currentA}
                 units={layout.units}
               />
@@ -670,7 +726,7 @@ function App() {
             <section class="history-panel">
               <div class="section-heading">
                 <h2>Pack current history</h2>
-                <small>A · recent samples</small>
+                <small>A · direction unverified</small>
               </div>
               {tab === "charging" && (
                 <Suspense fallback={<p>Loading history…</p>}>
@@ -678,7 +734,7 @@ function App() {
                     reading={signals.currentA}
                     units={layout.units}
                     dark={dark}
-                    label="Pack current (CAN sign)"
+                    label="Pack current"
                     staleAfter={
                       catalog.find((d) => d.key === "currentA")?.stale_after
                     }
@@ -848,9 +904,6 @@ function App() {
                   <ion-select-option value="metric">Metric</ion-select-option>
                   <ion-select-option value="imperial">US</ion-select-option>
                 </ion-select>
-              </ion-item>
-              <ion-item button detail onClick={() => setChooseOpen(true)}>
-                <ion-label>Choose instruments</ion-label>
               </ion-item>
             </ion-list>
           </main>

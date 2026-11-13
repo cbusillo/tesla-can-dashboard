@@ -34,6 +34,7 @@ def test_layout_survives_restart_and_rejects_unknown_signals(tmp_path) -> None:
                         "units": "imperial",
                         "instruments": ["voltageV"],
                         "presentation": "history",
+                        "historyInstrument": "currentA",
                         "ranges": {"voltageV": {"minimum": 250, "maximum": 450}},
                     },
                 )
@@ -41,8 +42,11 @@ def test_layout_survives_restart_and_rejects_unknown_signals(tmp_path) -> None:
             layout = client.get("/api/layout").json()
             assert layout["theme"] == "night"
             assert layout["presentation"] == "history"
+            assert layout["historyInstrument"] == "currentA"
             assert layout["ranges"]["voltageV"] == {"minimum": 250, "maximum": 450}
             assert client.put("/api/layout", json={"instruments": ["invented"]}).status_code == 422
+            assert client.put("/api/layout", json={"historyInstrument": "invented"}).status_code == 422
+            assert client.get("/api/layout").json() == layout
             assert (
                 client.put("/api/layout", json={"theme": "day"}, headers={"Origin": "https://unrelated.example"}).status_code == 403
             )
