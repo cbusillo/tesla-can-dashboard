@@ -13,6 +13,9 @@ from zero. The service reconnects when the interface returns. The browser
 reconnects automatically, marks held readings when the connection drops, and
 supports remote page reload at `/control` while
 the page is still open.
+Settings → Connection opens a public test page only when tapped. Use the
+browser's Back control to return. This supports parked connectivity observations;
+it does not configure an uplink or certify Wi-Fi/cellular coexistence.
 
 Overview shows the first two selected instruments as open dials and the rest
 as readings, with selectable recent history. Cells provides chart selection,
