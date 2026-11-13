@@ -71,12 +71,15 @@ controls are not implemented. No vehicle command endpoint exists.
 
 Charging → History shows recorded pack energy and cell balance. Live battery
 observations are saved every five minutes independently of raw CAN recording
-or browser activity, including fresh fields and available cell-group voltages.
+or browser activity, after a 30-second wake settling period, including fresh
+fields and available cell-group voltages rounded to 0.1 mV.
 Replay and demonstration values never enter this history. A background writer
 keeps storage work off acquisition; a storage failure leaves live readings
 running and appears in History. Storage retains the newest 200,000 observations
 (about 23 months of continuous collection) without deleting raw recordings.
-Queries return at most 481 sampled observations, including the latest point.
+History preserves the recorder's free-space reserve. Queries return at most
+481 sampled observations, including the latest point, without the stored
+per-cell arrays; those stay on disk for later cell comparisons.
 Charts show dots rather than inventing continuity across sleep or missing data.
 Dates follow the Pi clock; row-count retention does not delete data based on
 an offline clock jump. This history is not a health percentage or cell-age

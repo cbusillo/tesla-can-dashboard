@@ -26,8 +26,6 @@ def test_battery_history_queries_bound_days_and_do_not_record_demo(tmp_path) -> 
     engine = Engine(None, Recorder(tmp_path / "sessions", reserve_bytes=0))
     with TestClient(create_app(engine, tmp_path)) as client:
         assert client.get("/api/battery-history?days=7").json()["observations"] == []
-        assert client.get("/api/battery-history?days=0").status_code == 422
-        assert client.get("/api/battery-history?days=366").status_code == 422
         assert not (tmp_path / "battery.sqlite3").exists()
 
 

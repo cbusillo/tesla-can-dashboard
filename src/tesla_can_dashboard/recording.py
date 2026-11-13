@@ -16,6 +16,11 @@ MAX_ANALYSIS_BYTES = 64 * 1024 * 1024
 MAX_ANALYSIS_FRAMES = 500_000
 MAX_CHUNK_FRAMES = MAX_ANALYSIS_FRAMES // 5
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
+DEFAULT_RESERVE_BYTES = 1024 * 1024 * 1024
+
+
+def has_storage_space(directory: Path, reserve_bytes: int) -> bool:
+    return shutil.disk_usage(directory).free >= reserve_bytes
 
 
 class InterruptedTailError(ValueError):
@@ -82,7 +87,7 @@ def read_frames(path: Path, *, require_complete: bool = False, maximum_bytes: in
 
 
 class Recorder:
-    def __init__(self, directory: Path, maximum_bytes: int = 256 * 1024 * 1024, reserve_bytes: int = 1024 * 1024 * 1024) -> None:
+    def __init__(self, directory: Path, maximum_bytes: int = 256 * 1024 * 1024, reserve_bytes: int = DEFAULT_RESERVE_BYTES) -> None:
         self.directory = directory
         self.maximum_bytes = maximum_bytes
         self.reserve_bytes = reserve_bytes
@@ -109,7 +114,7 @@ class Recorder:
                 return self.active_id
             self.directory.mkdir(parents=True, exist_ok=True)
             self.bytes_used = sum(path.stat().st_size for path in self._files())
-            if self.bytes_used >= self.maximum_bytes or shutil.disk_usage(self.directory).free < self.reserve_bytes:
+            if self.bytes_used >= self.maximum_bytes or not has_storage_space(self.directory, self.reserve_bytes):
                 raise ValueError("Recording storage is full; export or remove a saved session first")
             session_id = uuid.uuid4().hex
             self.stream = (self.directory / f"{session_id}.jsonl").open("xb", buffering=0)
@@ -130,7 +135,7 @@ class Recorder:
                 if now - self.last_space_check > 1:
                     self.last_space_check = now
                     self.bytes_used = sum(path.stat().st_size for path in self._files())
-                    if shutil.disk_usage(self.directory).free < self.reserve_bytes:
+                    if not has_storage_space(self.directory, self.reserve_bytes):
                         self.last_error = "Recording stopped because storage is low"
                         self.stop()
                         return

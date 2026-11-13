@@ -24,6 +24,9 @@
 .charging-page > ion-segment {
   margin-bottom: 16px;
 }
+.charging-page ion-segment-button {
+  min-height: 44px;
+}
 .battery-history > ion-segment {
   max-width: 360px;
   margin-bottom: 20px;

@@ -5,14 +5,13 @@ import sqlite3
 import struct
 import threading
 import time
-import uuid
 from importlib.resources import files
 from pathlib import Path
 
 import cantools
 
 from .analysis import analyze_recording
-from .battery_history import INTERVAL_SECONDS, BatteryHistory
+from .battery_history import INTERVAL_SECONDS, SETTLE_SECONDS, BatteryHistory
 from .decoder import Decoder
 from .recording import Frame, Recorder, read_frames
 from .signals import SignalStore
@@ -83,18 +82,25 @@ class Engine:
     def _collect_battery_history(self) -> None:
         history = self.battery_history
         assert history is not None
-        capture = uuid.uuid4().hex
         next_observation = 0.0
+        settled_at: float | None = None
         while not self.stop_event.is_set():
-            if time.monotonic() >= next_observation:
+            now = time.monotonic()
+            with self.store.lock:
+                connected = self.store.last_frame_at is not None and now - self.store.last_frame_at <= 3
+            if not connected:
+                settled_at = None
+            elif settled_at is None:
+                settled_at = now + SETTLE_SECONDS
+            if settled_at is not None and now >= max(next_observation, settled_at):
                 try:
-                    if history.append(self.store.snapshot(), time.time(), capture):
+                    if history.append(self.store.snapshot(), time.time()):
                         next_observation = time.monotonic() + INTERVAL_SECONDS
                         history.error = None
                 except (OSError, sqlite3.Error):
                     if history.error is None:
                         LOGGER.exception("Battery history storage is unavailable; live acquisition will continue")
-                    history.error = "Battery history could not be saved"
+                    history.error = "Last history save failed"
                     next_observation = time.monotonic() + INTERVAL_SECONDS
             self.stop_event.wait(5)
 

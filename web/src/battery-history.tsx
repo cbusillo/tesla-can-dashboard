@@ -7,7 +7,6 @@ const History = lazy(() =>
 );
 type Observation = {
   timestamp: number;
-  capture: string;
   signals: Record<string, number | null>;
   cellSpreadMv: number | null;
 };
@@ -95,9 +94,9 @@ export function BatteryHistory({
       )}
       {loading ? (
         <p class="history-message">Loading history…</p>
-      ) : !data?.count ? (
+      ) : !data?.count && (error || data?.error) ? null : !data?.count ? (
         <p class="history-message">
-          History begins with live battery readings.
+          History starts after 30 seconds of live readings.
         </p>
       ) : (
         <>

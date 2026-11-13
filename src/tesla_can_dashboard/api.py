@@ -111,7 +111,7 @@ def create_app(
     allowed_origins = allowed_origins or {"http://127.0.0.1:8088", "http://localhost:8088"}
     reports: deque[dict] = deque(maxlen=20)
     layout_path = data_directory / "layout.json"
-    engine.battery_history = BatteryHistory(data_directory / "battery.sqlite3")
+    engine.battery_history = BatteryHistory(data_directory / "battery.sqlite3", reserve_bytes=engine.recorder.reserve_bytes)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -166,7 +166,10 @@ def create_app(
     def battery_history(days: int = Query(default=30, ge=1, le=365)) -> dict:
         assert engine.battery_history is not None
         try:
-            return engine.battery_history.read(time.time() - days * 86400)
+            result = engine.battery_history.read(time.time() - days * 86400)
+            for observation in result["observations"]:
+                observation.pop("cellGroups", None)
+            return result
         except (OSError, sqlite3.Error, ValueError):
             raise HTTPException(503, "Battery history could not be loaded") from None
 
