@@ -217,6 +217,7 @@ export function History({
   label,
   staleAfter = 3,
   height = 160,
+  samplesOnly = false,
 }: {
   reading: Reading | undefined;
   units: string;
@@ -224,6 +225,7 @@ export function History({
   label: string;
   staleAfter?: number;
   height?: number;
+  samplesOnly?: boolean;
 }) {
   const points = (reading?.history || []).filter(
     (point) =>
@@ -235,7 +237,7 @@ export function History({
   for (let index = 0; index < points.length; index++) {
     const previous = points[index - 1],
       point = points[index];
-    if (previous && point[0] - previous[0] > staleAfter)
+    if (!samplesOnly && previous && point[0] - previous[0] > staleAfter)
       history.push([(previous[0] + staleAfter) * 1000, null]);
     history.push([
       point[0] * 1000,
@@ -286,11 +288,11 @@ export function History({
     series: [
       {
         type: "line",
-        showSymbol: points.length < 2,
+        showSymbol: samplesOnly || points.length < 2,
         symbolSize: 4,
         connectNulls: false,
         lineStyle: {
-          width: 2,
+          width: samplesOnly ? 0 : 2,
           type: reading?.quality === "fresh" ? "solid" : "dashed",
           color: color(
             reading?.quality === "fresh" ? "chart-primary" : "chart-muted",
@@ -307,7 +309,9 @@ export function History({
         <Chart
           option={option}
           height={height}
-          label={label + " recent history"}
+          label={
+            label + (samplesOnly ? " recorded observations" : " recent history")
+          }
         />
       ) : (
         <div class="history-empty" style={{ height }}>

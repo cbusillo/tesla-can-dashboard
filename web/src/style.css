@@ -21,6 +21,33 @@
   font-family: var(--ion-font-family);
   color-scheme: light;
 }
+.charging-page > ion-segment {
+  margin-bottom: 16px;
+}
+.charging-page ion-segment-button {
+  min-height: 44px;
+}
+.battery-history > ion-segment {
+  max-width: 360px;
+  margin-bottom: 20px;
+}
+.history-message {
+  padding: 24px 0;
+  color: var(--muted);
+}
+.history-notes {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.history-notes summary {
+  padding: 12px 0;
+  color: var(--accent);
+  cursor: pointer;
+}
+.history-notes p {
+  margin-bottom: 12px;
+}
 :root.ion-palette-dark {
   --base: #171f27;
   --surface: #1d2731;

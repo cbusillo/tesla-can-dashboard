@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import sqlite3
 import time
 from collections import deque
 from contextlib import asynccontextmanager
@@ -8,13 +9,14 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Literal, Self
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .analysis import AnalysisLimitError
+from .battery_history import BatteryHistory
 from .engine import Engine
 from .recording import SESSION_ID
 from .signals import CATALOG
@@ -109,6 +111,7 @@ def create_app(
     allowed_origins = allowed_origins or {"http://127.0.0.1:8088", "http://localhost:8088"}
     reports: deque[dict] = deque(maxlen=20)
     layout_path = data_directory / "layout.json"
+    engine.battery_history = BatteryHistory(data_directory / "battery.sqlite3", reserve_bytes=engine.recorder.reserve_bytes)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -158,6 +161,17 @@ def create_app(
     @app.get("/api/catalog")
     def catalog() -> dict:
         return {"signals": [asdict(value) for value in CATALOG.values()], "currentDirection": "unqualified"}
+
+    @app.get("/api/battery-history")
+    def battery_history(days: int = Query(default=30, ge=1, le=365)) -> dict:
+        assert engine.battery_history is not None
+        try:
+            result = engine.battery_history.read(time.time() - days * 86400)
+            for observation in result["observations"]:
+                observation.pop("cellGroups", None)
+            return result
+        except (OSError, sqlite3.Error, ValueError):
+            raise HTTPException(503, "Battery history could not be loaded") from None
 
     @app.get("/api/layout")
     def get_layout() -> dict:
