@@ -6,20 +6,24 @@ def gear(seconds: float, value: int) -> Frame:
     return Frame(100, bytes(2) + bytes([value]) + bytes(5), 1000 + seconds, round(seconds * 1e9))
 
 
+def active_capture(recorder: Recorder) -> str:
+    identifier = recorder.active_id
+    assert identifier is not None
+    return identifier
+
+
 def test_automatic_capture_skips_park_and_keeps_reverse_and_drive_together(tmp_path, telemetry_dbc) -> None:
     recorder = Recorder(tmp_path / "raw", reserve_bytes=0)
     engine = Engine("can0", recorder, telemetry_dbc, auto_drives=True)
     engine.ingest(gear(0, 1))
     assert recorder.active_id is None
     engine.ingest(gear(1, 2))
-    session = recorder.active_id
-    assert session
+    session = active_capture(recorder)
     engine.ingest(gear(2, 4))
     assert recorder.active_id == session
     engine.ingest(gear(3, 1))
     engine.ingest(gear(3 + PARK_RECORDING_GRACE_SECONDS + 1, 1))
     assert recorder.active_id is None
-    assert isinstance(session, str)
     assert [frame.data[2] for frame in read_frames(recorder.path(session))] == [2, 4, 1]
 
 
