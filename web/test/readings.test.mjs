@@ -28,6 +28,14 @@ const fresh = (value, unit = "A") => ({
   history: [[100, value]],
 });
 
+test("categorical readings use supplied labels without making missing or invalid values readable", () => {
+  const choices = { "-2": "Idle", "18": "Running" };
+  assert.equal(display(fresh(-2), "metric", undefined, choices), choices[-2]);
+  assert.equal(display({ ...fresh(18), quality: "stale" }, "imperial", undefined, choices), choices[18]);
+  for (const reading of [undefined, fresh(99), { ...fresh(18), quality: "invalid" }, fresh(null)])
+    assert.equal(display(reading, "metric", undefined, choices), "—");
+});
+
 test("an offline browser holds zero without converting absent or invalid readings to usable values", () => {
   const snapshot = {
     mode: "live",

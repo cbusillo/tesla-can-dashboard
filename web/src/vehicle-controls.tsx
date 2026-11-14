@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./types";
 
 type Capabilities = {
@@ -11,11 +11,13 @@ type Capabilities = {
 
 export function useVehicleControls() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
-  const [code, setCode] = useState("");
+  const [pairing, setPairing] = useState<{ number: string } | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState("");
   const [result, setResult] = useState<{ action: string; message: string } | null>(null);
+  const polling = useRef<Promise<{ connected: boolean }> | null>(null);
+  const cancelled = useRef(false);
   useEffect(() => {
     api<Capabilities>("vehicle-controls").then((value) => {
       setCapabilities(value);
@@ -23,18 +25,52 @@ export function useVehicleControls() {
     }).catch(() => setCapabilities(null));
   }, []);
 
+  useEffect(() => {
+    if (!pairing || connected) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    cancelled.current = false;
+    async function poll() {
+      if (!alive || cancelled.current) return;
+      const pending = api<{ connected: boolean }>("vehicle-controls/connection-request/exchange", "POST", {});
+      polling.current = pending;
+      try {
+        const response = await pending;
+        if (!alive || cancelled.current) return;
+        if (response.connected) {
+          setConnected(true);
+          setPairing(null);
+          setConnectionMessage("");
+          setResult(null);
+          return;
+        }
+      } catch (error) {
+        if (!alive || cancelled.current) return;
+        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
+          setPairing(null);
+          setConnectionMessage("Request expired. Connect again.");
+          return;
+        }
+      } finally {
+        if (polling.current === pending) polling.current = null;
+      }
+      if (alive && !cancelled.current) timer = setTimeout(poll, 1500);
+    }
+    poll();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [pairing?.number, connected]);
+
   function request<T>(path: string, body?: unknown): Promise<T> {
     return api<T>("vehicle-controls/" + path, "POST", body ?? {}, {
-      headers: { Authorization: "Bearer " + code.trim() }, timeoutMs: 50000,
+      timeoutMs: 50000,
     });
   }
 
   async function connect() {
     setBusy(true);
     try {
-      await request("connect");
-      setConnected(true);
-      setCode("");
+      const pending = await request<{ number: string }>("connection-request");
+      setPairing(pending);
       setConnectionMessage("");
       setResult(null);
     } catch (error) {
@@ -44,10 +80,12 @@ export function useVehicleControls() {
 
   async function disconnect() {
     setBusy(true);
+    cancelled.current = true;
+    setPairing(null);
     try {
+      await polling.current?.catch(() => {});
       await request("disconnect");
       setConnected(false);
-      setCode("");
       setConnectionMessage("");
       setResult(null);
     } catch { setConnectionMessage("Controls could not disconnect"); }
@@ -75,7 +113,7 @@ export function useVehicleControls() {
     } finally { setBusy(false); }
   }
 
-  return { capabilities, code, setCode, connected, busy, connectionMessage, result, connect, disconnect, change };
+  return { capabilities, pairing, connected, busy, connectionMessage, result, connect, disconnect, change };
 }
 
 export type VehicleControls = ReturnType<typeof useVehicleControls>;
@@ -83,14 +121,14 @@ export type VehicleControls = ReturnType<typeof useVehicleControls>;
 export function ControlConnection({ controls }: { controls: VehicleControls }) {
   if (!controls.capabilities?.available) return null;
   return <>
-    {!controls.connected ? <details>
+    {!controls.connected ? <details key="connect">
       <summary>Connect controls</summary>
-      <form onSubmit={(event) => { event.preventDefault(); controls.connect(); }}>
-        <label>Access code <input type="password" autoComplete="off" value={controls.code}
-          onInput={(event) => controls.setCode(event.currentTarget.value)} disabled={controls.busy} /></label>
-        <ion-button type="submit" disabled={controls.busy || !controls.code.trim()}>Connect</ion-button>
-      </form>
-    </details> : <details><summary>Controls</summary>
+      {controls.pairing ? <>
+        <output class="connection-number" aria-label="Approval number">{controls.pairing.number}</output>
+        <p role="status">Waiting for approval…</p>
+        <ion-button fill="clear" disabled={controls.busy} onClick={controls.disconnect}>Cancel</ion-button>
+      </> : <ion-button disabled={controls.busy} onClick={controls.connect}>Connect</ion-button>}
+    </details> : <details key="connected"><summary>Controls</summary>
       <ion-button fill="clear" disabled={controls.busy} onClick={controls.disconnect}>Disconnect controls</ion-button>
     </details>}
     {controls.connectionMessage && <p role="status">{controls.connectionMessage}</p>}

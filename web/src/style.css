@@ -282,6 +282,20 @@ ion-tab-button ion-label {
   font-weight: 350;
   font-variant-numeric: tabular-nums;
 }
+.cluster .categorical .reading {
+  min-height: 200px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 96px;
+}
+.connection-number {
+  display: block;
+  margin-top: 12px;
+  font-size: 32px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+}
 .dial-unit {
   text-align: center;
   font-size: 13px;

@@ -103,11 +103,19 @@ The temperature control sets both sides together, in half-degree steps from
 16–27°C. Charging includes a 50–100% charge-limit slider; dragging it only
 prepares a value, and Set sends one change. Leaving Charging clears an unsent
 value. The existing browser connection works for both controls.
+Connect shows a short approval number instead of asking for the Pi's private
+access code. An operator matches that number with the browser's owner and
+approves the exact request. The number alone grants nothing. The browser
+receives a separate secure session that survives service restarts; neither the
+master access code nor the vehicle key is sent by this approval flow.
 Each manual change requires authenticated browser access and a single-use request.
 Fresh CAN readings after the request confirm the resulting settings. A Bluetooth
 acknowledgement alone displays Sent; a timeout stays unconfirmed and is never
 retried automatically. Replay and stale or missing cabin readings disable changes.
 Controls remain disabled unless explicitly configured; see [installation](deploy/README.md#optional-bluetooth-temperature-controls).
+
+Gear uses P, R, N and D in readings and step history. Its internal numeric
+codes and numeric dial-range controls are not presented as instruments.
 
 Charging → History shows recorded pack energy and cell balance. Live battery
 observations are saved every five minutes independently of raw CAN recording

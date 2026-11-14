@@ -37,6 +37,7 @@ export type Definition = {
   minimum: number;
   maximum: number;
   stale_after: number;
+  choices?: Record<string, string> | null;
 };
 export type DialRange = { minimum: number; maximum: number };
 export type Layout = {
@@ -96,8 +97,10 @@ export function display(
   reading: Reading | undefined,
   units: string,
   decimals?: number,
+  choices?: Definition["choices"],
 ) {
   if (!usableReading(reading)) return "—";
+  if (choices) return choices[String(reading.value)] ?? "—";
   return (
     convert(reading.value, reading.unit, units).toFixed(
       decimals ?? (reading.unit === "V" ? 2 : 1),

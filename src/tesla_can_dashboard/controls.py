@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import json
 import math
@@ -5,8 +6,9 @@ import secrets
 import socket
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, cast
 
 from .engine import Engine
 from .signals import CATALOG
@@ -17,6 +19,30 @@ MAXIMUM_TEMPERATURE_C = 27
 TEMPERATURE_STEP_C = 0.5
 MINIMUM_CHARGE_LIMIT_PERCENT = 50
 MAXIMUM_CHARGE_LIMIT_PERCENT = 100
+BROWSER_REQUEST_SECONDS = 300
+BROWSER_SESSION_SECONDS = 30 * 86400
+MAXIMUM_BROWSER_REQUESTS = 10
+MAXIMUM_BROWSER_REQUESTS_PER_CLIENT = 2
+BROWSER_REQUEST_COOKIE = "__Host-tesla_control_request"
+BROWSER_SESSION_COOKIE = "__Host-tesla_controls"
+
+
+class BrowserPrompt(TypedDict):
+    number: str
+    expiresInSeconds: int
+
+
+class PendingBrowser(BrowserPrompt):
+    requestId: str
+
+
+@dataclass
+class BrowserRequest:
+    number: str
+    client: str
+    secret_hash: bytes
+    expires: float
+    approved: bool = False
 
 
 class HelperUnavailable(OSError):
@@ -48,9 +74,99 @@ class VehicleControls:
         self.lock = threading.Lock()
         self.nonce_lock = threading.Lock()
         self.nonces: dict[str, float] = {}
+        self.browser_lock = threading.Lock()
+        self.browser_requests: dict[str, BrowserRequest] = {}
 
     def authenticated(self, authorization: str) -> bool:
         return hmac.compare_digest(authorization.encode(), f"Bearer {self.token}".encode())
+
+    def _session_signature(self, payload: str) -> str:
+        return hmac.new(self.token.encode(), f"tesla-browser-session:{payload}".encode(), hashlib.sha256).hexdigest()
+
+    def issue_browser_session(self) -> str:
+        payload = f"v1.{int(time.time()) + BROWSER_SESSION_SECONDS}.{secrets.token_urlsafe(24)}"
+        return f"{payload}.{self._session_signature(payload)}"
+
+    def authenticated_browser(self, cookie: str) -> bool:
+        try:
+            payload, signature = cookie.rsplit(".", 1)
+            if not hmac.compare_digest(self._session_signature(payload).encode(), signature.encode()):
+                return False
+            version, expires, _ = payload.split(".")
+            return version == "v1" and int(expires) > time.time()
+        except ValueError:
+            return False
+
+    def _expire_browser_requests_locked(self) -> None:
+        now = time.monotonic()
+        self.browser_requests = {number: request for number, request in self.browser_requests.items() if request.expires > now}
+
+    def _browser_request_locked(self, cookie: str) -> tuple[str, BrowserRequest] | None:
+        request_id, _, secret = cookie.partition(".")
+        request = self.browser_requests.get(request_id)
+        if request is None or not hmac.compare_digest(request.secret_hash, hashlib.sha256(secret.encode()).digest()):
+            return None
+        return request_id, request
+
+    def request_browser(self, cookie: str, client: str) -> tuple[BrowserPrompt, str]:
+        with self.browser_lock:
+            self._expire_browser_requests_locked()
+            existing = self._browser_request_locked(cookie)
+            if existing is not None:
+                _, request = existing
+                return BrowserPrompt(number=request.number, expiresInSeconds=max(0, int(request.expires - time.monotonic()))), cookie
+            if len(self.browser_requests) >= MAXIMUM_BROWSER_REQUESTS:
+                raise ValueError("Too many connection requests. Try again in a few minutes.")
+            if sum(request.client == client for request in self.browser_requests.values()) >= MAXIMUM_BROWSER_REQUESTS_PER_CLIENT:
+                raise ValueError("Other connections are waiting. Finish one or try again in a few minutes.")
+            number = f"{secrets.randbelow(1_000_000):06d}"
+            while any(request.number == number for request in self.browser_requests.values()):
+                number = f"{secrets.randbelow(1_000_000):06d}"
+            request_id = secrets.token_urlsafe(16)
+            secret = secrets.token_urlsafe(32)
+            self.browser_requests[request_id] = BrowserRequest(
+                number, client, hashlib.sha256(secret.encode()).digest(), time.monotonic() + BROWSER_REQUEST_SECONDS
+            )
+            return BrowserPrompt(number=number, expiresInSeconds=BROWSER_REQUEST_SECONDS), f"{request_id}.{secret}"
+
+    def pending_browsers(self) -> list[PendingBrowser]:
+        with self.browser_lock:
+            self._expire_browser_requests_locked()
+            return [
+                {
+                    "requestId": request_id,
+                    "number": request.number,
+                    "expiresInSeconds": max(0, int(request.expires - time.monotonic())),
+                }
+                for request_id, request in self.browser_requests.items()
+                if not request.approved
+            ]
+
+    def approve_browser(self, request_id: str) -> None:
+        with self.browser_lock:
+            self._expire_browser_requests_locked()
+            request = self.browser_requests.get(request_id)
+            if request is None:
+                raise ValueError("Request expired. Connect again.")
+            request.approved = True
+
+    def consume_browser_request(self, cookie: str) -> bool:
+        with self.browser_lock:
+            self._expire_browser_requests_locked()
+            matched = self._browser_request_locked(cookie)
+            if matched is None:
+                raise ValueError("Request expired. Connect again.")
+            number, request = matched
+            if not request.approved:
+                return False
+            del self.browser_requests[number]
+            return True
+
+    def cancel_browser_request(self, cookie: str) -> None:
+        with self.browser_lock:
+            matched = self._browser_request_locked(cookie)
+            if matched is not None:
+                del self.browser_requests[matched[0]]
 
     def issue_nonce(self) -> str:
         now = time.monotonic()

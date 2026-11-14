@@ -218,6 +218,7 @@ export function History({
   staleAfter = 3,
   height = 160,
   samplesOnly = false,
+  choices,
 }: {
   reading: Reading | undefined;
   units: string;
@@ -226,6 +227,7 @@ export function History({
   staleAfter?: number;
   height?: number;
   samplesOnly?: boolean;
+  choices?: Record<string, string> | null;
 }) {
   const points = (reading?.history || []).filter(
     (point) =>
@@ -249,6 +251,7 @@ export function History({
     .filter((value): value is number => value !== null);
   const lowest = values.length ? Math.min(...values) : 0;
   const highest = values.length ? Math.max(...values) : 1;
+  const categories = choices ? Object.keys(choices).map(Number) : [];
   const padding = Math.max(
     (highest - lowest) * 0.1,
     Math.abs(highest) * 0.001,
@@ -260,7 +263,7 @@ export function History({
       trigger: "axis",
       renderMode: "richText",
       confine: true,
-      valueFormatter: (v) => (typeof v === "number" ? v.toFixed(2) : String(v)),
+      valueFormatter: (v) => typeof v === "number" ? (choices ? choices[String(v)] ?? "—" : v.toFixed(2)) : "—",
     },
     xAxis: {
       type: "time",
@@ -276,18 +279,20 @@ export function History({
     yAxis: {
       type: "value",
       splitNumber: 2,
-      min: lowest - padding,
-      max: highest + padding,
+      min: categories.length ? Math.min(...categories) : lowest - padding,
+      max: categories.length ? Math.max(...categories) : highest + padding,
+      interval: categories.length ? 1 : undefined,
       axisLabel: {
         color: color("chart-muted"),
         fontSize: 10,
-        formatter: (v: number) => Number(v.toFixed(2)).toString(),
+        formatter: (v: number) => choices ? choices[String(v)] ?? "" : Number(v.toFixed(2)).toString(),
       },
       splitLine: { lineStyle: { color: color("chart-track") } },
     },
     series: [
       {
         type: "line",
+        step: choices ? "end" : undefined,
         showSymbol: samplesOnly || points.length < 2,
         symbolSize: 4,
         connectNulls: false,

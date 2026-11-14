@@ -54,7 +54,7 @@ Use this only after enrolling and qualifying a key with Tesla's official
 vehicle-command SDK on the target car. Install its `tesla-control` binary under
 the root-private key directory's `bin/`, with `key.pem` and a private `vin` file.
 Never copy the key into the web service's directory or expose SDK output to clients.
-The helper accepts only a temperature number and checks its local peer's UID.
+The helper accepts only the configured temperature or charge-limit payload and checks its local peer's UID.
 It has no network listener, arbitrary-command option or automatic retry.
 
 For older installations, change the dashboard's User/Group and its own
@@ -80,10 +80,34 @@ Serve experimental `--designs` previews in a separate process; they cannot share
 the authenticated controls origin.
 To rotate browser access, replace only this access-code file and restart the
 dashboard; the vehicle key and helper do not change. Existing browser codes then fail.
-Connect controls using the disclosure in Cabin temperature. An HTTPS-only,
-HttpOnly, SameSite=Strict cookie remembers access in that browser for 30 days.
-Disconnect controls clears it; rotating the access-code file revokes all browsers.
-The code is not placed in URLs, local storage or logs, and the input clears after connection.
+Connect controls using the disclosure in Cabin temperature or Charging. The
+browser shows a six-digit approval number. Ask its owner to confirm that number,
+then use the existing private credential on the host to list pending requests:
+
+```sh
+uv run python -m tesla_can_dashboard.browser_approval \
+  --url http://127.0.0.1:8088 --origin https://dashboard.example \
+  --token-file /absolute/private/access-code --list
+```
+
+After owner approval, use the same command with `--approve REQUEST_ID` from
+that exact list entry, replacing `--list`. The number is only a visual match;
+the approval operation uses the separate request ID. Obtain owner approval
+before granting a browser access. The operator client accepts HTTPS or loopback
+only and never follows redirects or retries an uncertain approval.
+
+Requests expire after five minutes and exchange once, using a host-bound secret
+cookie that cannot be reconstructed from the displayed number. Up to ten requests
+can wait at once, with at most two per client address; retry after expiry if full. Approving a connection sends no
+vehicle command. The browser receives a signed, purpose-bound session, rather
+than the master access code. Session cookies are Secure, HttpOnly, SameSite=Strict,
+host-only and scoped to the dashboard origin with the `__Host-` prefix and root
+path. They survive service restarts and last 30 days. Session cookies cannot list
+or approve other browsers or renew their own sessions. The approval exchange uses
+a same-origin POST. Direct operator connection requires its private bearer credential. Disconnect clears this browser's cookies; rotating
+the access-code file revokes all browsers. Existing legacy cookies and direct
+operator access remain accepted so this update does not revoke existing access.
+The private code is not placed in URLs, browser inputs, local storage or logs.
 Use a trusted local network or authenticated HTTPS proxy, including for telemetry.
 
 Include the operator-qualified `UI_hvacReqTempSetpointLeft` and
