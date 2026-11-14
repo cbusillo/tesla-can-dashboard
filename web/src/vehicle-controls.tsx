@@ -11,7 +11,7 @@ type Capabilities = {
 
 export function useVehicleControls() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
-  const [pairing, setPairing] = useState<{ number: string; expiresInSeconds: number } | null>(null);
+  const [pairing, setPairing] = useState<{ number: string } | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState("");
@@ -32,7 +32,7 @@ export function useVehicleControls() {
     cancelled.current = false;
     async function poll() {
       if (!alive || cancelled.current) return;
-      const pending = api<{ connected: boolean }>("vehicle-controls/connection-request");
+      const pending = api<{ connected: boolean }>("vehicle-controls/connection-request/exchange", "POST", {});
       polling.current = pending;
       try {
         const response = await pending;
@@ -69,7 +69,7 @@ export function useVehicleControls() {
   async function connect() {
     setBusy(true);
     try {
-      const pending = await request<{ number: string; expiresInSeconds: number }>("connection-request");
+      const pending = await request<{ number: string }>("connection-request");
       setPairing(pending);
       setConnectionMessage("");
       setResult(null);

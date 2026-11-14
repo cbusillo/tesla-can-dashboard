@@ -22,6 +22,7 @@ MAXIMUM_CHARGE_LIMIT_PERCENT = 100
 BROWSER_REQUEST_SECONDS = 300
 BROWSER_SESSION_SECONDS = 30 * 86400
 MAXIMUM_BROWSER_REQUESTS = 10
+MAXIMUM_BROWSER_REQUESTS_PER_CLIENT = 2
 BROWSER_REQUEST_COOKIE = "__Host-tesla_control_request"
 BROWSER_SESSION_COOKIE = "__Host-tesla_controls"
 
@@ -38,6 +39,7 @@ class PendingBrowser(BrowserPrompt):
 @dataclass
 class BrowserRequest:
     number: str
+    client: str
     secret_hash: bytes
     expires: float
     approved: bool = False
@@ -106,7 +108,7 @@ class VehicleControls:
             return None
         return request_id, request
 
-    def request_browser(self, cookie: str) -> tuple[BrowserPrompt, str]:
+    def request_browser(self, cookie: str, client: str) -> tuple[BrowserPrompt, str]:
         with self.browser_lock:
             self._expire_browser_requests_locked()
             existing = self._browser_request_locked(cookie)
@@ -115,13 +117,15 @@ class VehicleControls:
                 return BrowserPrompt(number=request.number, expiresInSeconds=max(0, int(request.expires - time.monotonic()))), cookie
             if len(self.browser_requests) >= MAXIMUM_BROWSER_REQUESTS:
                 raise ValueError("Too many connection requests. Try again in a few minutes.")
+            if sum(request.client == client for request in self.browser_requests.values()) >= MAXIMUM_BROWSER_REQUESTS_PER_CLIENT:
+                raise ValueError("Other connections are waiting. Finish one or try again in a few minutes.")
             number = f"{secrets.randbelow(1_000_000):06d}"
             while any(request.number == number for request in self.browser_requests.values()):
                 number = f"{secrets.randbelow(1_000_000):06d}"
             request_id = secrets.token_urlsafe(16)
             secret = secrets.token_urlsafe(32)
             self.browser_requests[request_id] = BrowserRequest(
-                number, hashlib.sha256(secret.encode()).digest(), time.monotonic() + BROWSER_REQUEST_SECONDS
+                number, client, hashlib.sha256(secret.encode()).digest(), time.monotonic() + BROWSER_REQUEST_SECONDS
             )
             return BrowserPrompt(number=number, expiresInSeconds=BROWSER_REQUEST_SECONDS), f"{request_id}.{secret}"
 

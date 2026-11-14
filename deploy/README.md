@@ -98,15 +98,16 @@ only and never follows redirects or retries an uncertain approval.
 
 Requests expire after five minutes and exchange once, using a host-bound secret
 cookie that cannot be reconstructed from the displayed number. Up to ten requests
-can wait at once; retry after expiry if full. Approving a connection sends no
+can wait at once, with at most two per client address; retry after expiry if full. Approving a connection sends no
 vehicle command. The browser receives a signed, purpose-bound session, rather
 than the master access code. Session cookies are Secure, HttpOnly, SameSite=Strict,
 host-only and scoped to the dashboard origin with the `__Host-` prefix and root
 path. They survive service restarts and last 30 days. Session cookies cannot list
-or approve other browsers. Disconnect clears this browser's cookies; rotating
+or approve other browsers or renew their own sessions. The approval exchange uses
+a same-origin POST. Direct operator connection requires its private bearer credential. Disconnect clears this browser's cookies; rotating
 the access-code file revokes all browsers. Existing legacy cookies and direct
 operator access remain accepted so this update does not revoke existing access.
-The code is not placed in URLs, local storage or logs, and the input clears after connection.
+The private code is not placed in URLs, browser inputs, local storage or logs.
 Use a trusted local network or authenticated HTTPS proxy, including for telemetry.
 
 Include the operator-qualified `UI_hvacReqTempSetpointLeft` and

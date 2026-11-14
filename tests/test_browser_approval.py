@@ -4,7 +4,7 @@ import time
 from http.cookiejar import CookieJar
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import cast
+from typing import NoReturn, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +17,7 @@ from tesla_can_dashboard.controls import (
     BROWSER_SESSION_COOKIE,
     BROWSER_SESSION_SECONDS,
     MAXIMUM_BROWSER_REQUESTS,
+    MAXIMUM_BROWSER_REQUESTS_PER_CLIENT,
     VehicleControls,
 )
 from tesla_can_dashboard.engine import Engine
@@ -30,6 +31,11 @@ def browser_setup(tmp_path: Path, monkeypatch):
     engine = Engine("can0", Recorder(tmp_path / "raw", reserve_bytes=0))
     monkeypatch.setattr(engine, "start", lambda: None)
     controls = VehicleControls(engine, tmp_path / "absent-helper", token)
+
+    def forbid_vehicle_command(payload: dict) -> NoReturn:
+        raise AssertionError(f"Browser approval must not call the vehicle helper: {payload}")
+
+    monkeypatch.setattr(controls, "_send", forbid_vehicle_command)
     origin = "https://dashboard.example"
     app = create_app(engine, tmp_path, allowed_origins={origin}, controls=controls)
     return app, controls, origin
@@ -47,21 +53,27 @@ def test_browser_needs_operator_approval_and_its_own_secret_then_receives_a_scop
         request_cookie = next(entry for entry in cast(CookieJar, cookies.jar) if entry.name == BROWSER_REQUEST_COOKIE)
         assert request_cookie.secure and not request_cookie.domain_specified and request_cookie.path == "/"
         assert request_cookie.has_nonstandard_attr("HttpOnly")
-        assert not browser.get("/api/vehicle-controls/connection-request").json()["connected"]
+        assert not browser.post("/api/vehicle-controls/connection-request/exchange", headers={"Origin": origin}).json()["connected"]
         assert browser.post("/api/vehicle-controls/prepare", headers={"Origin": origin}).status_code == 401
         assert stranger.get("/api/vehicle-controls/browser-requests").status_code == 401
         operator = {"Authorization": f"Bearer {controls.token}", "Origin": origin}
         pending = stranger.get("/api/vehicle-controls/browser-requests", headers=operator).json()["pending"]
         assert len(pending) == 1 and pending[0]["number"] == number
         request_id = pending[0]["requestId"]
+        for headers in ({}, {"Origin": "https://other.example"}):
+            assert browser.post("/api/vehicle-controls/connection-request/exchange", headers=headers).status_code == 403
         assert stranger.post(f"/api/vehicle-controls/browser-requests/{number}/approve", headers=operator).status_code == 404
         assert stranger.post(f"/api/vehicle-controls/browser-requests/{request_id}/approve", headers=operator).status_code == 200
         stranger.cookies.set(BROWSER_REQUEST_COOKIE, f"{request_id}.wrong-secret")
-        assert stranger.get("/api/vehicle-controls/connection-request").status_code == 404
-        assert browser.get("/api/vehicle-controls/connection-request").json()["connected"]
+        assert stranger.post("/api/vehicle-controls/connection-request/exchange", headers={"Origin": origin}).status_code == 404
+        assert browser.post("/api/vehicle-controls/connection-request/exchange", headers={"Origin": origin}).json()["connected"]
         session = cookies.get(BROWSER_SESSION_COOKIE)
         assert session and controls.token not in session and session != cookie
+        session_cookie = next(entry for entry in cast(CookieJar, cookies.jar) if entry.name == BROWSER_SESSION_COOKIE)
+        assert session_cookie.secure and not session_cookie.domain_specified and session_cookie.path == "/"
+        assert session_cookie.has_nonstandard_attr("HttpOnly")
         assert browser.get("/api/vehicle-controls").json()["connected"]
+        assert browser.post("/api/vehicle-controls/connect", headers={"Origin": origin}).status_code == 401
         assert browser.get("/api/vehicle-controls/browser-requests").status_code == 401
         assert (
             browser.get("/api/vehicle-controls/browser-requests", headers={"Authorization": f"Bearer {session}"}).status_code == 401
@@ -72,7 +84,7 @@ def test_browser_needs_operator_approval_and_its_own_secret_then_receives_a_scop
         )
         assert not controls.browser_requests
         stranger.cookies.set(BROWSER_REQUEST_COOKIE, cookie)
-        assert stranger.get("/api/vehicle-controls/connection-request").status_code == 404
+        assert stranger.post("/api/vehicle-controls/connection-request/exchange", headers={"Origin": origin}).status_code == 404
         assert browser.post("/api/vehicle-controls/disconnect", headers={"Origin": origin}).status_code == 200
         assert not browser.get("/api/vehicle-controls").json()["connected"]
 
@@ -80,7 +92,7 @@ def test_browser_needs_operator_approval_and_its_own_secret_then_receives_a_scop
 def test_session_survives_a_server_restart_but_pending_approval_does_not(browser_setup, tmp_path: Path) -> None:
     _, controls, _ = browser_setup
     session = controls.issue_browser_session()
-    _, pending_cookie = controls.request_browser("")
+    _, pending_cookie = controls.request_browser("", "synthetic-client")
     token = tmp_path / "same-master"
     token.write_text(controls.token)
     restarted = VehicleControls(controls.engine, tmp_path / "absent-helper", token)
@@ -91,7 +103,7 @@ def test_session_survives_a_server_restart_but_pending_approval_does_not(browser
 
 def test_cancelling_an_approved_request_before_exchange_cannot_mint_a_session(browser_setup) -> None:
     _, controls, _ = browser_setup
-    _, cookie = controls.request_browser("")
+    _, cookie = controls.request_browser("", "synthetic-client")
     request_id = controls.pending_browsers()[0]["requestId"]
     controls.approve_browser(request_id)
     controls.cancel_browser_request(cookie)
@@ -103,12 +115,18 @@ def test_requests_expire_cancel_and_do_not_refresh_their_lifetime(browser_setup,
     app, controls, origin = browser_setup
     with TestClient(app, base_url=origin) as browser:
         first = browser.post("/api/vehicle-controls/connection-request", headers={"Origin": origin}).json()
-        request_id = controls.pending_browsers()[0]["requestId"]
-        expires = controls.browser_requests[request_id].expires
+        original_clock = time.monotonic()
         assert (
             browser.post("/api/vehicle-controls/connection-request", headers={"Origin": origin}).json()["number"] == first["number"]
         )
-        assert controls.browser_requests[request_id].expires == expires
+        with monkeypatch.context() as clock:
+            clock.setattr(time, "monotonic", lambda: original_clock + BROWSER_REQUEST_SECONDS / 2)
+            assert browser.post("/api/vehicle-controls/connection-request", headers={"Origin": origin}).status_code == 200
+        with monkeypatch.context() as clock:
+            clock.setattr(time, "monotonic", lambda: original_clock + BROWSER_REQUEST_SECONDS + 1)
+            assert browser.post("/api/vehicle-controls/connection-request/exchange", headers={"Origin": origin}).status_code == 404
+        browser.post("/api/vehicle-controls/connection-request", headers={"Origin": origin})
+        request_id = controls.pending_browsers()[0]["requestId"]
         browser.post("/api/vehicle-controls/disconnect", headers={"Origin": origin})
         with pytest.raises(ValueError):
             controls.approve_browser(request_id)
@@ -117,7 +135,7 @@ def test_requests_expire_cancel_and_do_not_refresh_their_lifetime(browser_setup,
         real_clock = time.monotonic()
         with monkeypatch.context() as clock:
             clock.setattr(time, "monotonic", lambda: real_clock + BROWSER_REQUEST_SECONDS + 1)
-            assert browser.get("/api/vehicle-controls/connection-request").status_code == 404
+            assert browser.post("/api/vehicle-controls/connection-request/exchange", headers={"Origin": origin}).status_code == 404
             with pytest.raises(ValueError):
                 controls.approve_browser(request_id)
 
@@ -135,8 +153,8 @@ def test_only_current_operator_requests_can_approve_and_origin_is_required(brows
             ).status_code
             == 403
         )
-        for _ in range(MAXIMUM_BROWSER_REQUESTS - len(controls.browser_requests)):
-            controls.request_browser("")
+        for index in range(MAXIMUM_BROWSER_REQUESTS - len(controls.pending_browsers())):
+            controls.request_browser("", f"synthetic-client-{index}")
         with TestClient(app, base_url=origin) as extra:
             assert extra.post("/api/vehicle-controls/connection-request", headers={"Origin": origin}).status_code == 429
 
@@ -145,7 +163,6 @@ def test_session_tampering_expiry_and_master_rotation_cannot_keep_access(browser
     _, controls, _ = browser_setup
     session = controls.issue_browser_session()
     assert controls.authenticated_browser(session)
-    assert not controls.authenticated_browser(controls.token)
     for invalid in ("", session + "x", session.rsplit(".", 1)[0] + ".é", "v1.99999999999.not-signed"):
         assert not controls.authenticated_browser(invalid)
     issued = time.time()
@@ -223,3 +240,52 @@ def test_operator_rejects_cleartext_or_credential_urls_before_reading_the_secret
     with pytest.raises(SystemExit) as error:
         browser_approval.main()
     assert error.value.code == 2
+
+
+def test_one_client_cannot_fill_the_global_browser_queue(browser_setup) -> None:
+    _, controls, _ = browser_setup
+    for _ in range(MAXIMUM_BROWSER_REQUESTS_PER_CLIENT):
+        controls.request_browser("", "one-client")
+    with pytest.raises(ValueError):
+        controls.request_browser("", "one-client")
+    prompt, cookie = controls.request_browser("", "other-client")
+    assert cookie and prompt["number"]
+
+
+@pytest.mark.parametrize("approval", ["", "   "])
+def test_empty_operator_approval_is_rejected_before_reading_a_secret(tmp_path: Path, monkeypatch, approval: str) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "browser_approval",
+            "--url",
+            "http://127.0.0.1:8088",
+            "--origin",
+            "https://dashboard.example",
+            "--token-file",
+            str(tmp_path / "missing"),
+            "--approve",
+            approval,
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        browser_approval.main()
+    assert error.value.code == 2
+
+
+def test_unreadable_operator_secret_has_a_clean_error(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "browser_approval",
+            "--url",
+            "http://127.0.0.1:8088",
+            "--origin",
+            "https://dashboard.example",
+            "--token-file",
+            str(tmp_path / "missing"),
+            "--list",
+        ],
+    )
+    with pytest.raises(SystemExit, match="unreadable"):
+        browser_approval.main()

@@ -249,7 +249,7 @@ def create_app(
 
     @app.post("/api/vehicle-controls/connect")
     def connect_controls(request: Request, response: Response) -> dict:
-        controller = authorize_controls(request)
+        controller = authorize_browser_operator(request)
         remember_controls(response, controller)
         return {"connected": True}
 
@@ -257,8 +257,11 @@ def create_app(
     def request_browser_connection(request: Request, response: Response) -> dict:
         if controls is None:
             raise HTTPException(404, "Controls are not connected")
+        client = request.client
         try:
-            public, cookie = controls.request_browser(request.cookies.get(BROWSER_REQUEST_COOKIE, ""))
+            public, cookie = controls.request_browser(
+                request.cookies.get(BROWSER_REQUEST_COOKIE, ""), client.host if client is not None else "unknown"
+            )
         except ValueError as error:
             raise HTTPException(429, str(error)) from None
         response.set_cookie(
@@ -271,7 +274,7 @@ def create_app(
         )
         return dict(public)
 
-    @app.get("/api/vehicle-controls/connection-request")
+    @app.post("/api/vehicle-controls/connection-request/exchange")
     def poll_browser_connection(request: Request, response: Response) -> dict:
         if controls is None:
             raise HTTPException(404, "Controls are not connected")

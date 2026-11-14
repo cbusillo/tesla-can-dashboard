@@ -31,10 +31,15 @@ def main() -> None:
         or not (target.scheme == "https" or (target.scheme == "http" and target.hostname in {"127.0.0.1", "localhost", "::1"}))
     ):
         parser.error("Use HTTPS or a local loopback URL without credentials or query parameters")
+    if args.approve is not None and not args.approve.strip():
+        parser.error("Use an exact requestId from --list")
     path = "/api/vehicle-controls/browser-requests"
     if args.approve:
         path += f"/{quote(args.approve, safe='')}/approve"
-    token = args.token_file.read_text().strip()
+    try:
+        token = args.token_file.read_text().strip()
+    except OSError:
+        raise SystemExit("The private access-code file is unreadable") from None
     request = urllib.request.Request(
         args.url.rstrip("/") + path,
         data=b"{}" if args.approve else None,
