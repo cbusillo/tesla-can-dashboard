@@ -19,6 +19,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .analysis import AnalysisLimitError
 from .battery_history import BatteryHistory
 from .controls import (
+    BROWSER_REQUEST_COOKIE,
+    BROWSER_REQUEST_SECONDS,
+    BROWSER_SESSION_COOKIE,
+    BROWSER_SESSION_SECONDS,
     MAXIMUM_CHARGE_LIMIT_PERCENT,
     MAXIMUM_TEMPERATURE_C,
     MINIMUM_CHARGE_LIMIT_PERCENT,
@@ -205,6 +209,7 @@ def create_app(
     def has_controls_access(request: Request) -> bool:
         return controls is not None and (
             controls.authenticated(request.headers.get("authorization", ""))
+            or controls.authenticated_browser(request.cookies.get(BROWSER_SESSION_COOKIE, ""))
             or controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}")
         )
 
@@ -212,8 +217,25 @@ def create_app(
         if controls is None:
             raise HTTPException(404, "Controls are not connected")
         if not has_controls_access(request):
-            raise HTTPException(401, "Connect controls with your access code")
+            raise HTTPException(401, "Connect controls first")
         return controls
+
+    def authorize_browser_operator(request: Request) -> VehicleControls:
+        if controls is None:
+            raise HTTPException(404, "Controls are not connected")
+        if not controls.authenticated(request.headers.get("authorization", "")):
+            raise HTTPException(401, "Operator access is required")
+        return controls
+
+    def remember_controls(response: Response, controller: VehicleControls) -> None:
+        response.set_cookie(
+            BROWSER_SESSION_COOKIE,
+            controller.issue_browser_session(),
+            max_age=BROWSER_SESSION_SECONDS,
+            secure=True,
+            httponly=True,
+            samesite="strict",
+        )
 
     @app.get("/api/vehicle-controls")
     def controls_status(request: Request) -> dict:
@@ -228,20 +250,64 @@ def create_app(
     @app.post("/api/vehicle-controls/connect")
     def connect_controls(request: Request, response: Response) -> dict:
         controller = authorize_controls(request)
+        remember_controls(response, controller)
+        return {"connected": True}
+
+    @app.post("/api/vehicle-controls/connection-request")
+    def request_browser_connection(request: Request, response: Response) -> dict:
+        if controls is None:
+            raise HTTPException(404, "Controls are not connected")
+        try:
+            public, cookie = controls.request_browser(request.cookies.get(BROWSER_REQUEST_COOKIE, ""))
+        except ValueError as error:
+            raise HTTPException(429, str(error)) from None
         response.set_cookie(
-            "tesla_controls",
-            controller.token,
-            max_age=30 * 86400,
-            path="/api/vehicle-controls",
+            BROWSER_REQUEST_COOKIE,
+            cookie,
+            max_age=BROWSER_REQUEST_SECONDS,
             secure=True,
             httponly=True,
             samesite="strict",
         )
-        return {"connected": True}
+        return dict(public)
+
+    @app.get("/api/vehicle-controls/connection-request")
+    def poll_browser_connection(request: Request, response: Response) -> dict:
+        if controls is None:
+            raise HTTPException(404, "Controls are not connected")
+        cookie = request.cookies.get(BROWSER_REQUEST_COOKIE, "")
+        if has_controls_access(request):
+            controls.cancel_browser_request(cookie)
+            return {"connected": True}
+        try:
+            approved = controls.consume_browser_request(cookie)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
+        if approved:
+            remember_controls(response, controls)
+            response.delete_cookie(BROWSER_REQUEST_COOKIE, secure=True, httponly=True, samesite="strict")
+        return {"connected": approved}
+
+    @app.get("/api/vehicle-controls/browser-requests")
+    def list_browser_connections(request: Request) -> dict:
+        return {"pending": authorize_browser_operator(request).pending_browsers()}
+
+    @app.post("/api/vehicle-controls/browser-requests/{request_id}/approve")
+    def approve_browser_connection(request_id: str, request: Request) -> dict:
+        controller = authorize_browser_operator(request)
+        try:
+            controller.approve_browser(request_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
+        return {"approved": True, "requestId": request_id}
 
     @app.post("/api/vehicle-controls/disconnect")
-    def disconnect_controls(response: Response) -> dict:
+    def disconnect_controls(request: Request, response: Response) -> dict:
+        if controls is not None:
+            controls.cancel_browser_request(request.cookies.get(BROWSER_REQUEST_COOKIE, ""))
         response.delete_cookie("tesla_controls", path="/api/vehicle-controls", secure=True, httponly=True, samesite="strict")
+        response.delete_cookie(BROWSER_REQUEST_COOKIE, secure=True, httponly=True, samesite="strict")
+        response.delete_cookie(BROWSER_SESSION_COOKIE, secure=True, httponly=True, samesite="strict")
         return {"connected": False}
 
     @app.post("/api/vehicle-controls/prepare")

@@ -4,6 +4,8 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
+DRIVE_GEARS = {"DI_GEAR_P": 1, "DI_GEAR_R": 2, "DI_GEAR_N": 3, "DI_GEAR_D": 4}
+
 
 @dataclass(frozen=True)
 class SignalDefinition:
@@ -14,6 +16,7 @@ class SignalDefinition:
     minimum: float
     maximum: float
     stale_after: float = 3
+    choices: dict[int, str] | None = None
 
 
 SIGNALS = (
@@ -29,7 +32,9 @@ SIGNALS = (
     SignalDefinition("maximumTemperatureC", "Maximum pack temperature", "°C", "battery", -60, 150, 30),
     SignalDefinition("chargingPowerKw", "Charger line power", "kW", "charging", 0, 1000),
     SignalDefinition("chargeLimitPercent", "Charge limit", "%", "charging", 0, 100, 30),
-    SignalDefinition("driveGear", "Gear (1 P, 2 R, 3 N, 4 D)", "", "drive", 1, 4, 0.5),
+    SignalDefinition(
+        "driveGear", "Gear", "", "drive", 1, 4, 0.5, {value: name.removeprefix("DI_GEAR_") for name, value in DRIVE_GEARS.items()}
+    ),
     SignalDefinition("speedKmh", "Speed", "km/h", "drive", 0, 450),
     SignalDefinition("driverTemperatureC", "Driver temperature", "°C", "climate", 15.5, 27.5),
     SignalDefinition("passengerTemperatureC", "Passenger temperature", "°C", "climate", 15.5, 27.5),

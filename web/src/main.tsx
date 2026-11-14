@@ -317,12 +317,12 @@ function App() {
     const label = instrumentLabel(key);
     return (
       <section
-        class={`instrument ${reading?.quality || "unavailable"}`}
+        class={`instrument ${reading?.quality || "unavailable"}${definition?.choices ? " categorical" : ""}`}
         key={key}
       >
         <div class="instrument-heading">
           <h2>{label}</h2>
-          {editing && (
+          {editing && !definition?.choices && (
             <ion-button
               fill="clear"
               onClick={() => openRange(key)}
@@ -332,7 +332,7 @@ function App() {
             </ion-button>
           )}
         </div>
-        {dial ? (
+        {dial && !definition?.choices ? (
           <Suspense fallback={<div class="chart-loading">Loading dial…</div>}>
             <Dial
               reading={reading}
@@ -349,7 +349,7 @@ function App() {
             />
           </Suspense>
         ) : (
-          <div class="reading">{display(reading, layout.units)}</div>
+          <div class="reading">{display(reading, layout.units, undefined, definition?.choices)}</div>
         )}
         <div class="quality">{readingStatus(reading)}</div>
         {layout.presentation === "history" && (
@@ -360,6 +360,7 @@ function App() {
               dark={dark}
               label={label}
               staleAfter={definition?.stale_after}
+              choices={definition?.choices}
             />
           </Suspense>
         )}
@@ -476,8 +477,9 @@ function App() {
                           label={instrumentLabel(key)}
                           reading={signals[key]}
                           units={layout.units}
+                          choices={catalog.find((d) => d.key === key)?.choices}
                         >
-                          {editing && (
+                          {editing && !catalog.find((d) => d.key === key)?.choices && (
                             <ion-button
                               fill="clear"
                               onClick={() => openRange(key)}
@@ -533,7 +535,7 @@ function App() {
                       >
                         {catalog.map((d) => (
                           <option value={d.key} key={d.key}>
-                            {d.label} ({displayUnit(d.unit, layout.units)})
+                            {d.label}{d.unit ? ` (${displayUnit(d.unit, layout.units)})` : ""}
                           </option>
                         ))}
                       </select>
@@ -548,6 +550,7 @@ function App() {
                       dark={dark}
                       label={instrumentLabel(historyKey)}
                       staleAfter={historyDefinition?.stale_after}
+                      choices={historyDefinition?.choices}
                       height={80}
                     />
                   </Suspense>

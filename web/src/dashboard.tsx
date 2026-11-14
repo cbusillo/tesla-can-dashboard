@@ -1,16 +1,18 @@
 import type { ComponentChildren } from "preact";
-import { display, readingStatus, type Reading } from "./types";
+import { display, readingStatus, type Reading, type Definition } from "./types";
 
 export function Metric({
   label,
   reading,
   units,
   children,
+  choices,
 }: {
   label: string;
   reading?: Reading;
   units: string;
   children?: ComponentChildren;
+  choices?: Definition["choices"];
 }) {
   return (
     <div class={`metric ${reading?.quality || "unavailable"}`}>
@@ -18,7 +20,7 @@ export function Metric({
         {label}
         {children}
       </div>
-      <div class="metric-value">{display(reading, units)}</div>
+      <div class="metric-value">{display(reading, units, undefined, choices)}</div>
       <div class="quality">{readingStatus(reading)}</div>
     </div>
   );

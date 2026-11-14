@@ -8,7 +8,7 @@ from typing import NamedTuple
 import cantools
 from cantools.database.can import Message, Signal
 
-from .signals import is_valid_signal
+from .signals import DRIVE_GEARS, is_valid_signal
 
 SIGNAL_NAMES = {
     "BMS_dcLinkVoltage": "voltageV",
@@ -44,7 +44,6 @@ UNIT_FACTORS: dict[str, dict[str | None, float]] = {
     "driverTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
     "passengerTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
 }
-GEARS = {"DI_GEAR_P": 1, "DI_GEAR_R": 2, "DI_GEAR_N": 3, "DI_GEAR_D": 4}
 CELL_NAME = re.compile(r"BMS_brickVoltage(\d+)$")
 INVALID_CHOICES = {"SNA", "INVALID", "NOT_AVAILABLE"}
 
@@ -143,7 +142,7 @@ class Decoder:
                         continue
                     raw = int(signal.conversion.scaled_to_raw(number))
                     choice = str((signal.choices or {}).get(raw, ""))
-                    values[key] = GEARS.get(choice)
+                    values[key] = DRIVE_GEARS.get(choice)
                     continue
                 values[key] = number * factor if number is not None else None
             match = CELL_NAME.fullmatch(signal.name)
