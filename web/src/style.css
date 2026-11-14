@@ -700,3 +700,23 @@ ion-list-header {
 .cell-grid button.unavailable {
   opacity: 0.5;
 }
+.climate-panel {
+  margin: 16px 0 24px;
+  border-bottom: 1px solid var(--ion-color-step-150, #ddd);
+  padding-bottom: 16px;
+}
+.climate-readings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px 48px;
+}
+.climate-readings > div { display: grid; gap: 8px; }
+.climate-readings span { color: var(--ion-color-medium); font-size: 16px; }
+.climate-readings strong { font-size: 32px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.climate-adjust { margin-left: auto; }
+.climate-adjust ion-button { min-width: 72px; min-height: 48px; font-size: 26px; }
+.climate-panel details { margin-top: 16px; }
+.climate-panel summary { cursor: pointer; padding: 12px 0; }
+.climate-panel input { min-height: 44px; max-width: 100%; font: inherit; }
+.climate-panel form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

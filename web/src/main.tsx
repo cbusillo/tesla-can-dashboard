@@ -46,6 +46,7 @@ import {
 } from "./types";
 import { Metric, Page } from "./dashboard";
 import { SessionAnalysis } from "./session-analysis";
+import { Climate } from "./climate";
 import "./style.css";
 initialize({ mode: "ios", animated: false });
 addIcons({
@@ -405,6 +406,7 @@ function App() {
           }
         >
           <main class="overview">
+            <Climate data={data} units={layout.units} />
             {!catalog.length && <p role="status">Loading instruments…</p>}
             <div class="charge-context">
               <div class="charge-level">

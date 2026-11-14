@@ -7,6 +7,7 @@
   personal recordings and host-specific deployment facts outside this repo.
 - The initial receiver is receive-only. Do not reset the CAN interface or add
   vehicle commands as part of telemetry or replay work.
+- Vehicle controls belong only in the separately configured Bluetooth helper.
 - Keep unavailable, invalid, stale and disconnected values distinct from zero.
 - Use uv for Python tooling. Use local frontend assets with no CDN dependency.
 - Keep the interface responsive on an Intel Atom browser. Test with recorded

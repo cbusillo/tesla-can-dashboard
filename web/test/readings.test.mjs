@@ -7,7 +7,16 @@ import {
   holdSnapshot,
   convert,
   toCanonical,
+  nextCabinTemperature,
 } from "../src/types.ts";
+
+test("both-zone adjustment moves each side in the chosen direction and respects the supplied limits", () => {
+  const limits = { minimumC: 16, maximumC: 27, stepC: 0.5 };
+  assert.equal(nextCabinTemperature(19, 22, -1, limits), 18.5);
+  assert.equal(nextCabinTemperature(19, 22, 1, limits), 22.5);
+  assert.equal(nextCabinTemperature(limits.minimumC, 22, -1, limits), null);
+  assert.equal(nextCabinTemperature(19, limits.maximumC, 1, limits), null);
+});
 
 const fresh = (value, unit = "A") => ({
   value,

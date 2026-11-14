@@ -106,25 +106,44 @@ export function display(
     displayUnit(reading.unit, units)
   );
 }
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function nextCabinTemperature(
+  driver: number, passenger: number, direction: -1 | 1,
+  limits: { minimumC: number; maximumC: number; stepC: number },
+): number | null {
+  const baseline = direction < 0 ? Math.min(driver, passenger) : Math.max(driver, passenger);
+  const target = Math.round((baseline + direction * limits.stepC) / limits.stepC) * limits.stepC;
+  return Number.isFinite(target) && target >= limits.minimumC && target <= limits.maximumC ? target : null;
+}
+
 export async function api<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  options: { headers?: Record<string, string>; timeoutMs?: number } = {},
 ): Promise<T> {
   const response = await fetch("/api/" + path, {
     method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...options.headers },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
   });
   if (!response.ok) {
     const message = await response
       .json()
       .catch(() => ({ detail: "Request failed" }));
-    throw new Error(
+    throw new ApiError(
       typeof message.detail === "string"
         ? message.detail
         : "Please check the requested values",
+      response.status,
     );
   }
   return response.json();

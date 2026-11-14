@@ -8,8 +8,9 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .analysis import AnalysisLimitError
 from .battery_history import BatteryHistory
+from .controls import MAXIMUM_TEMPERATURE_C, MINIMUM_TEMPERATURE_C, TEMPERATURE_STEP_C, TemperatureControls, valid_temperature
 from .engine import Engine
 from .recording import SESSION_ID
 from .signals import CATALOG
@@ -75,6 +77,19 @@ class ReplayRequest(BaseModel):
         return value
 
 
+class TemperatureRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    temperatureC: float
+    nonce: str = Field(min_length=1, max_length=64)
+
+    @field_validator("temperatureC")
+    @classmethod
+    def supported_temperature(cls, value: float) -> float:
+        if not valid_temperature(value):
+            raise ValueError("Choose a supported temperature in half-degree steps")
+        return value
+
+
 class BrowserReport(BaseModel):
     browser: str = Field(max_length=1024)
     updates: int = Field(ge=0, le=1000000)
@@ -107,8 +122,17 @@ def create_app(
     assets: Path | None = None,
     allowed_origins: set[str] | None = None,
     designs: Path | None = None,
+    controls: TemperatureControls | None = None,
 ) -> FastAPI:
     allowed_origins = allowed_origins or {"http://127.0.0.1:8088", "http://localhost:8088"}
+    if controls is not None:
+        if designs is not None:
+            raise ValueError("Serve design previews separately from vehicle controls")
+        if any(
+            urlsplit(origin).scheme != "https" and urlsplit(origin).hostname not in {"127.0.0.1", "localhost", "::1"}
+            for origin in allowed_origins
+        ):
+            raise ValueError("Vehicle controls require HTTPS or a loopback origin")
     reports: deque[dict] = deque(maxlen=20)
     layout_path = data_directory / "layout.json"
     engine.battery_history = BatteryHistory(data_directory / "battery.sqlite3", reserve_bytes=engine.recorder.reserve_bytes)
@@ -130,7 +154,9 @@ def create_app(
     async def same_origin_changes(request: Request, call_next):
         if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
             origin = request.headers.get("origin")
-            if origin is not None and origin not in allowed_origins:
+            if (origin is not None and origin not in allowed_origins) or (
+                request.url.path.startswith("/api/vehicle-controls/") and origin is None
+            ):
                 return JSONResponse({"detail": "Unexpected request origin"}, status_code=403)
             try:
                 length = int(request.headers.get("content-length", "0"))
@@ -149,9 +175,67 @@ def create_app(
         return {
             "status": "ok",
             "receiveOnly": True,
+            "bluetoothControls": controls is not None,
             "mode": "live" if engine.interface else "demonstration",
             "connection": engine.store.snapshot()["connection"]["state"] if engine.interface else "not-connected",
         }
+
+    def has_controls_access(request: Request) -> bool:
+        return controls is not None and (
+            controls.authenticated(request.headers.get("authorization", ""))
+            or controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}")
+        )
+
+    def authorize_controls(request: Request) -> TemperatureControls:
+        if controls is None:
+            raise HTTPException(404, "Controls are not connected")
+        if not has_controls_access(request):
+            raise HTTPException(401, "Connect controls with your access code")
+        return controls
+
+    @app.get("/api/vehicle-controls")
+    def controls_status(request: Request) -> dict:
+        return {
+            "available": controls is not None,
+            "connected": has_controls_access(request),
+            "actions": ["temperature"] if controls else [],
+            "temperature": {"minimumC": MINIMUM_TEMPERATURE_C, "maximumC": MAXIMUM_TEMPERATURE_C, "stepC": TEMPERATURE_STEP_C},
+        }
+
+    @app.post("/api/vehicle-controls/connect")
+    def connect_controls(request: Request, response: Response) -> dict:
+        controller = authorize_controls(request)
+        response.set_cookie(
+            "tesla_controls",
+            controller.token,
+            max_age=30 * 86400,
+            path="/api/vehicle-controls",
+            secure=True,
+            httponly=True,
+            samesite="strict",
+        )
+        return {"connected": True}
+
+    @app.post("/api/vehicle-controls/disconnect")
+    def disconnect_controls(response: Response) -> dict:
+        response.delete_cookie("tesla_controls", path="/api/vehicle-controls", secure=True, httponly=True, samesite="strict")
+        return {"connected": False}
+
+    @app.post("/api/vehicle-controls/prepare")
+    def prepare_temperature(request: Request) -> dict:
+        controller = authorize_controls(request)
+        try:
+            return {"nonce": controller.issue_nonce()}
+        except ValueError as error:
+            raise HTTPException(429, str(error)) from None
+
+    @app.post("/api/vehicle-controls/temperature")
+    def change_temperature(body: TemperatureRequest, request: Request) -> dict:
+        controller = authorize_controls(request)
+        try:
+            return controller.change(body.temperatureC, body.nonce)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
 
     @app.get("/api/snapshot")
     @app.get("/snapshot")
@@ -283,7 +367,7 @@ def create_app(
         return {"checks": list(reports)}
 
     @app.get("/control", response_class=HTMLResponse)
-    def controls() -> str:
+    def browser_controls_page() -> str:
         return CONTROL_PAGE
 
     if designs is not None and designs.is_dir():
