@@ -36,6 +36,7 @@ export function useVehicleControls() {
       setConnected(true);
       setCode("");
       setConnectionMessage("");
+      setResult(null);
     } catch (error) {
       setConnectionMessage(error instanceof Error ? error.message : "Controls could not connect");
     } finally { setBusy(false); }
