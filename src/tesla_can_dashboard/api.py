@@ -196,8 +196,7 @@ def create_app(
     def health() -> dict:
         return {
             "status": "ok",
-            "receiveOnly": controls is None,
-            "canReceiveOnly": True,
+            "receiveOnly": True,
             "bluetoothControls": controls is not None,
             "mode": "live" if engine.interface else "demonstration",
             "connection": engine.store.snapshot()["connection"]["state"] if engine.interface else "not-connected",

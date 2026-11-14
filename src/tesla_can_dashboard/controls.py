@@ -68,7 +68,7 @@ class VehicleControls:
         store = self.engine.store
         now = time.monotonic()
         with store.lock:
-            if store.snapshot(now)["connection"]["state"] != "connected":
+            if not store.is_connected(now):
                 return None
             readings = {}
             for key in keys:

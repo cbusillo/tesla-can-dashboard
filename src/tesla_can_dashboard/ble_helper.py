@@ -81,7 +81,7 @@ class ControlHandler(socketserver.StreamRequestHandler):
         self.connection.settimeout(3)
         _, uid, _ = struct.unpack("3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
         if uid != server.allowed_uid:
-            logging.getLogger(__name__).warning("Rejected a temperature request from an unexpected local identity")
+            logging.getLogger(__name__).warning("Rejected a vehicle request from an unexpected local identity")
             return
         outcome = {"outcome": "unknown"}
         try:

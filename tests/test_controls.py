@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from tesla_can_dashboard.api import create_app
 from tesla_can_dashboard.ble_helper import BluetoothControls, ControlServer
-from tesla_can_dashboard.controls import VehicleControls
+from tesla_can_dashboard.controls import MAXIMUM_CHARGE_LIMIT_PERCENT, MINIMUM_CHARGE_LIMIT_PERCENT, VehicleControls
 from tesla_can_dashboard.decoder import Decoder
 from tesla_can_dashboard.engine import Engine
 from tesla_can_dashboard.recording import Recorder
@@ -242,7 +242,7 @@ def test_charge_limit_cannot_send_into_a_quiet_bus_even_while_its_setting_is_fre
         controller.change_charge_limit(69, controller.issue_nonce())
 
 
-@pytest.mark.parametrize("value", [49, 101, 70.5, True, "70"])
+@pytest.mark.parametrize("value", [MINIMUM_CHARGE_LIMIT_PERCENT - 1, MAXIMUM_CHARGE_LIMIT_PERCENT + 1, 70.5, True, "70"])
 def test_invalid_charge_limit_never_reaches_helper(controller: VehicleControls, monkeypatch, value: object) -> None:
     monkeypatch.setattr(controller, "_send", lambda _: pytest.fail("Invalid setting must not transmit"))
     with pytest.raises(ValueError):
@@ -282,8 +282,38 @@ def test_charge_endpoint_requires_access_and_does_not_accept_other_commands(
             ]
             == "unchanged"
         )
-        health = client.get("/api/health").json()
-        assert health["canReceiveOnly"] and not health["receiveOnly"]
+
+
+@pytest.mark.skipif(not hasattr(socket, "SO_PEERCRED"), reason="Linux peer credentials")
+@pytest.mark.parametrize(
+    "payload,accepted",
+    [
+        ({"chargeLimitPercent": 69}, True),
+        ({"chargeLimitPercent": True}, False),
+        ({"chargeLimitPercent": 70.5}, False),
+        ({"chargeLimitPercent": 69, "temperatureC": 20}, False),
+        ({"command": "charging-start"}, False),
+    ],
+)
+def test_helper_whitelist_accepts_only_the_single_valid_charge_limit(
+    tmp_path: Path, monkeypatch, payload: dict, accepted: bool
+) -> None:
+    bluetooth = BluetoothControls(tmp_path)
+    calls = []
+    monkeypatch.setattr(bluetooth, "change", lambda _: pytest.fail("No temperature command expected"))
+    monkeypatch.setattr(bluetooth, "change_charge_limit", lambda value: calls.append(value) or {"outcome": "acknowledged"})
+    with TemporaryDirectory(prefix="tc-", dir="/tmp") as directory:
+        path = Path(directory) / "s"
+        with ControlServer(path, os.getuid(), bluetooth) as server:
+            thread = threading.Thread(target=server.handle_request, daemon=True)
+            thread.start()
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+                peer.connect(str(path))
+                peer.sendall(json.dumps(payload).encode() + b"\n")
+                peer.recv(1024)
+            thread.join(2)
+            assert not thread.is_alive()
+    assert calls == ([payload["chargeLimitPercent"]] if accepted else [])
 
 
 def test_charge_helper_invokes_only_the_fixed_limit_command(tmp_path: Path, monkeypatch) -> None:

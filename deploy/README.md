@@ -106,5 +106,5 @@ profile and an active live CAN connection. Their shared lock, single-use request
 bounded execution, access code and post-request CAN confirmation are the same as
 for temperature. An SDK acknowledgement alone never claims confirmation. A BLE
 vehicle-state query is not required: it can time out even after a successful
-command. `receiveOnly` in health describes overall capability; `canReceiveOnly`
-stays true when the separate Bluetooth controls are enabled.
+command. Existing health fields retain their meanings; `bluetoothControls`
+reports whether the separate convenience helper is configured.

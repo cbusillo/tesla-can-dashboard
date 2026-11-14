@@ -13,8 +13,8 @@ export function ChargeLimit({ data, controls, active }: { data: Snapshot | null;
   }, [active, controls.connected, data?.mode]);
   async function apply() {
     if (!live || draft === null) return;
-    const result = await controls.change("charge-limit", { percent: draft });
-    if (result === "confirmed" || result === "unchanged") setDraft(null);
+    await controls.change("charge-limit", { percent: draft });
+    setDraft(null);
   }
   return <section class="climate-panel charge-limit-panel" aria-label="Charging limit">
     <div class="section-heading"><h2>Charge limit</h2><strong>{display(reading, "metric", 0)}</strong></div>

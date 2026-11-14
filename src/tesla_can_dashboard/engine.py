@@ -99,8 +99,7 @@ class Engine:
         settled_at: float | None = None
         while not self.stop_event.is_set():
             now = time.monotonic()
-            with self.store.lock:
-                connected = self.store.last_frame_at is not None and now - self.store.last_frame_at <= 3
+            connected = self.store.is_connected(now)
             if not connected:
                 settled_at = None
             elif settled_at is None:
