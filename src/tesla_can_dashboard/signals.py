@@ -20,6 +20,8 @@ SIGNALS = (
     SignalDefinition("voltageV", "Pack voltage", "V", "battery", 0, 1000),
     SignalDefinition("currentA", "Pack current", "A", "battery", -3000, 3000),
     SignalDefinition("batteryPowerKw", "Battery power", "kW", "battery", -3000, 3000),
+    SignalDefinition("outputLimitKw", "Battery output limit", "kW", "battery", 0, 1000),
+    SignalDefinition("regenLimitKw", "Regen limit", "kW", "battery", 0, 1000),
     SignalDefinition("displayedChargePercent", "Displayed charge", "%", "battery", 0, 100),
     SignalDefinition("fullPackEnergyKwh", "Full pack energy", "kWh", "battery", 0, 250, 30),
     SignalDefinition("remainingEnergyKwh", "Remaining energy", "kWh", "battery", 0, 250, 30),

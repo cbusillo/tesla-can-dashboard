@@ -13,6 +13,8 @@ from .signals import is_valid_signal
 SIGNAL_NAMES = {
     "BMS_dcLinkVoltage": "voltageV",
     "BMS_packCurrent": "currentA",
+    "BMS_maxDischargePower": "outputLimitKw",
+    "BMS_maxRegenPower": "regenLimitKw",
     "BMS_socUI": "displayedChargePercent",
     "BMS_nominalFullPackEnergy": "fullPackEnergyKwh",
     "BMS_nominalEnergyRemaining": "remainingEnergyKwh",
@@ -28,6 +30,8 @@ SIGNAL_NAMES = {
 UNIT_FACTORS: dict[str, dict[str | None, float]] = {
     "voltageV": {"V": 1, "mV": 0.001},
     "currentA": {"A": 1, "mA": 0.001},
+    "outputLimitKw": {"kW": 1, "W": 0.001},
+    "regenLimitKw": {"kW": 1, "W": 0.001},
     "displayedChargePercent": {"%": 1},
     "fullPackEnergyKwh": {"kWh": 1, "KWh": 1, "Wh": 0.001},
     "remainingEnergyKwh": {"kWh": 1, "KWh": 1, "Wh": 0.001},
