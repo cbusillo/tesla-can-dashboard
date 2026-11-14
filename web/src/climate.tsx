@@ -1,108 +1,36 @@
-import { useEffect, useState } from "preact/hooks";
-import { api, ApiError, display, nextCabinTemperature, type Snapshot } from "./types";
+import { display, nextCabinTemperature, type Snapshot } from "./types";
+import { ControlConnection, type VehicleControls } from "./vehicle-controls";
 
-export function Climate({ data, units }: { data: Snapshot | null; units: string }) {
-  const [available, setAvailable] = useState(false);
-  const [limits, setLimits] = useState<{minimumC: number; maximumC: number; stepC: number} | null>(null);
-  const [code, setCode] = useState("");
-  const [connected, setConnected] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+export function Climate({ data, units, controls }: { data: Snapshot | null; units: string; controls: VehicleControls }) {
+  const available = controls.capabilities?.available && controls.capabilities.actions.includes("temperature");
+  const limits = controls.capabilities?.temperature;
   const left = data?.signals.driverTemperatureC;
   const right = data?.signals.passengerTemperatureC;
-  const live = data?.mode === "live" && data?.connection.state === "connected" &&
+  const live = data?.mode === "live" && data.connection.state === "connected" &&
     left?.quality === "fresh" && right?.quality === "fresh";
-
-  useEffect(() => {
-    api<{ available: boolean; connected: boolean; temperature: {minimumC: number; maximumC: number; stepC: number} }>("vehicle-controls")
-      .then((result) => { setAvailable(result.available); setLimits(result.temperature); setConnected(result.connected); })
-      .catch(() => setAvailable(false));
-  }, []);
-
-  function request<T>(path: string, body?: unknown): Promise<T> {
-    return api<T>("vehicle-controls/" + path, "POST", body ?? {}, {
-      headers: { Authorization: "Bearer " + code.trim() }, timeoutMs: 50000,
-    });
-  }
-
-  async function connect() {
-    setBusy(true);
-    try {
-      await request("connect");
-      setConnected(true);
-      setCode("");
-      setMessage("");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Controls could not connect");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function disconnect() {
-    setBusy(true);
-    try {
-      await request("disconnect");
-      setConnected(false);
-      setCode("");
-      setMessage("");
-    } catch { setMessage("Controls could not disconnect"); }
-    finally { setBusy(false); }
-  }
-
-  async function change(direction: -1 | 1) {
+  function change(direction: -1 | 1) {
     if (!live || left?.value == null || right?.value == null || !limits) return;
     const target = nextCabinTemperature(left.value, right.value, direction, limits);
-    if (target === null) return;
-    setBusy(true);
-    setMessage("Sending…");
-    try {
-      const prepared = await request<{ nonce: string }>("prepare");
-      const result = await request<{ outcome: string }>("temperature", {
-        temperatureC: target, nonce: prepared.nonce,
-      });
-      setMessage(result.outcome === "confirmed" ? "Confirmed by car" :
-        result.outcome === "unchanged" ? "Already set" :
-        result.outcome === "acknowledged" ? "Sent. Waiting for car readings." :
-        "Not confirmed. Check the car before trying again.");
-    } catch (error) {
-      if (error instanceof ApiError && [401, 403, 409].includes(error.status)) {
-        setMessage(error.message);
-        if (error.status === 401) setConnected(false);
-      } else setMessage("Not confirmed. Check the car before trying again.");
-    } finally {
-      setBusy(false);
-    }
+    if (target !== null) controls.change("temperature", { temperatureC: target });
   }
-
-  if (!available && !left?.value && !right?.value) return null;
+  if (!available && left?.value == null && right?.value == null) return null;
   return <section class="climate-panel" aria-label="Cabin temperature">
     <div class="section-heading"><h2>Cabin temperature</h2></div>
     <div class="climate-readings">
       <div><span>Driver</span><strong>{display(left, units)}</strong></div>
       <div><span>Passenger</span><strong>{display(right, units)}</strong></div>
-      {available && connected && limits && <div class="climate-adjust">
+      {available && controls.connected && limits && <div class="climate-adjust">
         <span>Both sides</span>
         <div>
-          <ion-button aria-label="Lower both temperatures" disabled={busy || !live || Math.min(left?.value ?? 0, right?.value ?? 0) <= limits.minimumC}
+          <ion-button aria-label="Lower both temperatures" disabled={controls.busy || !live || Math.min(left?.value ?? 0, right?.value ?? 0) <= limits.minimumC}
             onClick={() => change(-1)}>−</ion-button>
-          <ion-button aria-label="Raise both temperatures" disabled={busy || !live || Math.max(left?.value ?? 0, right?.value ?? 0) >= limits.maximumC}
+          <ion-button aria-label="Raise both temperatures" disabled={controls.busy || !live || Math.max(left?.value ?? 0, right?.value ?? 0) >= limits.maximumC}
             onClick={() => change(1)}>+</ion-button>
         </div>
       </div>}
     </div>
-    {available && !connected && <details>
-      <summary>Connect controls</summary>
-      <form onSubmit={(event) => { event.preventDefault(); connect(); }}>
-        <label>Access code <input type="password" autoComplete="off" value={code}
-          onInput={(event) => setCode(event.currentTarget.value)} disabled={busy} /></label>
-        <ion-button type="submit" disabled={busy || !code.trim()}>Connect</ion-button>
-      </form>
-    </details>}
-    {available && connected && <details><summary>Controls</summary>
-      <ion-button fill="clear" disabled={busy} onClick={disconnect}>Disconnect controls</ion-button>
-    </details>}
-    {connected && !live && <p role="status">Waiting for live cabin readings</p>}
-    {message && <p role="status">{message}</p>}
+    <ControlConnection controls={controls} />
+    {controls.connected && !live && <p role="status">Waiting for live cabin readings</p>}
+    {controls.result?.action === "temperature" && <p role="status">{controls.result.message}</p>}
   </section>;
 }

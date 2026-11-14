@@ -93,7 +93,10 @@ Optional cabin controls use a separate private Bluetooth helper and an enrolled
 vehicle key. CAN remains receive-only. Both cabin setpoints can be decoded from
 a compatible operator profile; LO/HI are not presented as numeric temperatures.
 The temperature control sets both sides together, in half-degree steps from
-16–27°C. Each manual change requires an access code and a single-use request.
+16–27°C. Charging includes a 50–100% charge-limit slider; dragging it only
+prepares a value, and Set sends one change. Leaving Charging clears an unsent
+value. The existing browser connection works for both controls.
+Each manual change requires authenticated browser access and a single-use request.
 Fresh CAN readings after the request confirm the resulting settings. A Bluetooth
 acknowledgement alone displays Sent; a timeout stays unconfirmed and is never
 retried automatically. Replay and stale or missing cabin readings disable changes.

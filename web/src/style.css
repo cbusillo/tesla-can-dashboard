@@ -720,3 +720,9 @@ ion-list-header {
 .climate-panel summary { cursor: pointer; padding: 12px 0; }
 .climate-panel input { min-height: 44px; max-width: 100%; font: inherit; }
 .climate-panel form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.charge-limit-panel { margin: 24px 0; }
+.charge-limit-panel .section-heading strong { font-size: 28px; font-weight: 500; }
+.charge-limit-panel ion-range { padding: 8px 12px; }
+.charge-limit-actions { display: flex; align-items: center; gap: 16px; min-height: 48px; }
+.charge-limit-actions span:nth-child(2) { margin-left: auto; }
+.charge-limit-actions ion-button { min-height: 48px; min-width: 120px; }

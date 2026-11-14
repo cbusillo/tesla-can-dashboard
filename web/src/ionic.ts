@@ -22,6 +22,7 @@ import { defineCustomElement as define31 } from "@ionic/core/components/ion-inpu
 import { defineCustomElement as define34 } from "@ionic/core/components/ion-checkbox.js";
 import { defineCustomElement as defineSegment } from "@ionic/core/components/ion-segment.js";
 import { defineCustomElement as defineSegmentButton } from "@ionic/core/components/ion-segment-button.js";
+import { defineCustomElement as defineRange } from "@ionic/core/components/ion-range.js";
 export function defineComponents() {
   define0();
   define1();
@@ -47,4 +48,5 @@ export function defineComponents() {
   define34();
   defineSegment();
   defineSegmentButton();
+  defineRange();
 }

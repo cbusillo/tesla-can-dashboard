@@ -4,7 +4,7 @@ from pathlib import Path
 import uvicorn
 
 from .api import create_app
-from .controls import TemperatureControls
+from .controls import VehicleControls
 from .engine import Engine
 from .recording import Recorder
 
@@ -50,7 +50,7 @@ def main() -> None:
         discharge_current=args.discharge_current,
         auto_drives=args.record_drives,
     )
-    controls = TemperatureControls(engine, args.controls_socket, args.controls_token_file) if args.controls_socket else None
+    controls = VehicleControls(engine, args.controls_socket, args.controls_token_file) if args.controls_socket else None
     app = create_app(engine, args.data_dir, args.assets, set(args.allowed_origin) or None, args.designs, controls)
     uvicorn.run(app, host=args.bind, port=args.port)
 
