@@ -133,8 +133,6 @@ class Decoder:
                 factor = UNIT_FACTORS[key].get(signal.unit)
                 if factor is None:
                     continue
-                if key in {"driverTemperatureC", "passengerTemperatureC"} and number in {15, 28}:
-                    number = None
                 if key == "driveGear":
                     if number is None:
                         values[key] = None

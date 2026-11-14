@@ -1,9 +1,10 @@
 # Tesla CAN Dashboard
 
-A lightweight, receive-only dashboard for a Pi connected to Tesla CAN.
+A lightweight dashboard for a Pi connected to Tesla CAN, with optional local Bluetooth controls.
 Designed for the in-car browser, including Intel Atom cars. This is an early
 development preview using Preact, Ionic iOS components and local telemetry
 charts, with open instruments and restrained day/night colors.
+The CAN receiver always remains receive-only.
 
 The first implementation includes selectable dials, numeric readings and
 recent history, editable dial ranges, 96 configurable cell groups with a

@@ -1,7 +1,9 @@
 import argparse
+import grp
 import json
 import logging
 import os
+import pwd
 import socket
 import socketserver
 import struct
@@ -88,12 +90,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Private Bluetooth temperature helper; Linux only")
     parser.add_argument("--socket", type=Path, required=True)
     parser.add_argument("--key-directory", type=Path, required=True)
-    parser.add_argument("--allowed-uid", type=int, required=True)
-    parser.add_argument("--socket-gid", type=int, required=True)
+    parser.add_argument("--allowed-user", required=True)
+    parser.add_argument("--socket-group", required=True)
     args = parser.parse_args()
     os.umask(0o077)
-    with TemperatureServer(args.socket, args.allowed_uid, BluetoothTemperature(args.key_directory)) as server:
-        os.chown(args.socket, 0, args.socket_gid)
+    uid = pwd.getpwnam(args.allowed_user).pw_uid
+    gid = grp.getgrnam(args.socket_group).gr_gid
+    if uid == 0 or uid == 65534 or gid == 65534:
+        parser.error("Use a dedicated dashboard account and group")
+    with TemperatureServer(args.socket, uid, BluetoothTemperature(args.key_directory)) as server:
+        os.chown(args.socket, 0, gid)
         os.chmod(args.socket, 0o660)
         server.serve_forever()
 

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .analysis import AnalysisLimitError
 from .battery_history import BatteryHistory
-from .controls import TemperatureControls
+from .controls import MAXIMUM_TEMPERATURE_C, MINIMUM_TEMPERATURE_C, TEMPERATURE_STEP_C, TemperatureControls, valid_temperature
 from .engine import Engine
 from .recording import SESSION_ID
 from .signals import CATALOG
@@ -78,8 +78,15 @@ class ReplayRequest(BaseModel):
 
 class TemperatureRequest(BaseModel):
     model_config = {"extra": "forbid"}
-    temperatureC: float = Field(ge=16, le=27, multiple_of=0.5, allow_inf_nan=False)
+    temperatureC: float
     nonce: str = Field(min_length=1, max_length=64)
+
+    @field_validator("temperatureC")
+    @classmethod
+    def supported_temperature(cls, value: float) -> float:
+        if not valid_temperature(value):
+            raise ValueError("Choose a supported temperature in half-degree steps")
+        return value
 
 
 class BrowserReport(BaseModel):
@@ -173,7 +180,16 @@ def create_app(
 
     @app.get("/api/vehicle-controls")
     def controls_status() -> dict:
-        return {"available": controls is not None, "actions": ["temperature"] if controls else []}
+        return {
+            "available": controls is not None,
+            "actions": ["temperature"] if controls else [],
+            "temperature": {"minimumC": MINIMUM_TEMPERATURE_C, "maximumC": MAXIMUM_TEMPERATURE_C, "stepC": TEMPERATURE_STEP_C},
+        }
+
+    @app.post("/api/vehicle-controls/connect")
+    def connect_controls(request: Request) -> dict:
+        authorize_controls(request)
+        return {"connected": True}
 
     @app.post("/api/vehicle-controls/prepare")
     def prepare_temperature(request: Request) -> dict:

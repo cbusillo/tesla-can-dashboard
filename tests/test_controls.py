@@ -1,5 +1,8 @@
 import json
+import os
+import socket
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -7,11 +10,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tesla_can_dashboard.api import create_app
-from tesla_can_dashboard.ble_helper import BluetoothTemperature
+from tesla_can_dashboard.ble_helper import BluetoothTemperature, TemperatureServer
 from tesla_can_dashboard.controls import TemperatureControls
 from tesla_can_dashboard.decoder import Decoder
 from tesla_can_dashboard.engine import Engine
 from tesla_can_dashboard.recording import Recorder
+from tesla_can_dashboard.signals import SignalStore
 
 
 @pytest.fixture
@@ -40,16 +44,26 @@ VAL_ 100 UI_hvacReqTempSetpointLeft 0 "LO" 26 "HI";
         "passengerTemperatureC": 20,
     }
     values, _ = decoder.decode(100, bytes([0, 26, 0, 0, 0, 0, 0, 0]))
-    assert values == {"driverTemperatureC": None, "passengerTemperatureC": None}
+    store = SignalStore()
+    store.update(values, {}, time.time())
+    assert all(store.snapshot()["signals"][key]["value"] is None for key in values)
     with pytest.raises(ValueError, match="length"):
         decoder.decode(100, bytes(5))
 
 
 def test_acknowledgement_without_new_can_is_not_confirmation(controller: TemperatureControls, monkeypatch) -> None:
     calls = []
-    monkeypatch.setattr(controller, "_send", lambda target: calls.append(target) or "acknowledged")
+
+    def send(target: float) -> str:
+        calls.append(target)
+        controller.engine.store.update(
+            {"driverTemperatureC": target, "passengerTemperatureC": target}, {}, time.time(), now=time.monotonic() - 1
+        )
+        return "acknowledged"
+
+    monkeypatch.setattr(controller, "_send", send)
     nonce = controller.issue_nonce()
-    assert controller.change(20, nonce, confirmation_seconds=0)["outcome"] == "acknowledged"
+    assert controller.change(20, nonce, confirmation_seconds=0.02)["outcome"] == "acknowledged"
     with pytest.raises(ValueError, match="already used"):
         controller.change(20, nonce, confirmation_seconds=0)
     assert calls == [20]
@@ -133,8 +147,34 @@ def test_helper_passes_only_fixed_command_and_keeps_target_out_of_arguments(tmp_
         return subprocess.CompletedProcess(arguments, 0)
 
     monkeypatch.setattr(subprocess, "run", run)
-    assert bluetooth.change(20)["outcome"] == "acknowledged"
+    assert bluetooth.change(19.5)["outcome"] == "acknowledged"
     arguments, options = calls[0]
-    assert arguments[-2:] == ["climate-set-temp", "20C"]
+    assert arguments[-1] == "19.5C"
     assert "synthetic-test-target" not in json.dumps(arguments)
     assert options["env"]["TESLA_VIN"] == "synthetic-test-target"
+
+
+def test_busy_and_expired_changes_never_send(controller: TemperatureControls, monkeypatch) -> None:
+    monkeypatch.setattr(controller, "_send", lambda _: pytest.fail("No command expected"))
+    nonce = controller.issue_nonce()
+    controller.nonces[nonce] = time.monotonic() - 1
+    with pytest.raises(ValueError, match="expired"):
+        controller.change(20, nonce)
+    with controller.lock:
+        with pytest.raises(ValueError, match="in progress"):
+            controller.change(20, controller.issue_nonce())
+
+
+@pytest.mark.skipif(not hasattr(socket, "SO_PEERCRED"), reason="Linux peer credentials")
+def test_helper_rejects_another_local_identity_before_reading_command(tmp_path: Path, monkeypatch) -> None:
+    bluetooth = BluetoothTemperature(tmp_path)
+    monkeypatch.setattr(bluetooth, "change", lambda _: pytest.fail("Wrong identity must never command the vehicle"))
+    path = tmp_path / "helper.sock"
+    with TemperatureServer(path, os.getuid() + 1, bluetooth) as server:
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.connect(str(path))
+            assert client.recv(100) == b""
+        thread.join(2)
+        assert not thread.is_alive()

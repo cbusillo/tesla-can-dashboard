@@ -5,11 +5,11 @@ After=bluetooth.service
 [Service]
 Type=simple
 User=root
-Group=nogroup
+Group=tesla-dashboard
 RuntimeDirectory=tesla-temperature
 RuntimeDirectoryMode=0750
 WorkingDirectory=/opt/tesla-can-dashboard
-ExecStart=/opt/tesla-can-dashboard/.venv/bin/python -m tesla_can_dashboard.ble_helper --socket /run/tesla-temperature/helper.sock --key-directory /var/lib/tesla-controls --allowed-uid 65534 --socket-gid 65534
+ExecStart=/opt/tesla-can-dashboard/.venv/bin/python -m tesla_can_dashboard.ble_helper --socket /run/tesla-temperature/helper.sock --key-directory /var/lib/tesla-controls --allowed-user tesla-dashboard --socket-group tesla-dashboard
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

@@ -1,6 +1,6 @@
 # Pi installation
 
-The service consumes an already configured SocketCAN interface. It never
+The CAN receiver consumes an already configured SocketCAN interface. It never
 configures the bus, sends frames, wakes the car or changes network profiles.
 
 Build on a development computer with `npm ci --prefix web` followed by
@@ -55,7 +55,11 @@ Never copy the key into the web service's directory or expose SDK output to clie
 The helper accepts only a temperature number and checks its local peer's UID.
 It has no network listener, arbitrary-command option or automatic retry.
 
-Adapt `tesla-temperature-helper.service` to the installed paths and account IDs.
+Create a dedicated unprivileged system account and group named `tesla-dashboard`;
+it must have no login shell and no membership in other service groups. Change the
+dashboard's User/Group and its own data-directory ownership to that account.
+Do not give the shared nobody account access to the helper or browser credential.
+Adapt `tesla-temperature-helper.service` to the installed paths.
 Its private runtime directory must be traversable by the dashboard group and its
 socket writable only by root and that group. Systemd removes the runtime socket
 on service stop. The helper restores the Bluetooth soft-block state after each
@@ -68,6 +72,8 @@ browser credential, not the vehicle key. Configure the dashboard with
 `--controls-socket /run/tesla-temperature/helper.sock` and
 `--controls-token-file /absolute/private/access-code` plus the actual allowed
 HTTPS origin. The helper cannot read or change dashboard configuration.
+To rotate browser access, replace only this access-code file and restart the
+dashboard; the vehicle key and helper do not change. Existing browser codes then fail.
 Connect controls once per page session using the disclosure in Cabin temperature.
 The code stays in page memory and is not placed in URLs, local storage or logs.
 Use a trusted local network or authenticated HTTPS proxy, including for telemetry.

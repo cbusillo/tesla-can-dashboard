@@ -11,10 +11,18 @@ from .engine import Engine
 from .signals import CATALOG
 
 TEMPERATURE_KEYS = ("driverTemperatureC", "passengerTemperatureC")
+MINIMUM_TEMPERATURE_C = 16
+MAXIMUM_TEMPERATURE_C = 27
+TEMPERATURE_STEP_C = 0.5
 
 
 def valid_temperature(value: object) -> bool:
-    return type(value) in (int, float) and math.isfinite(value) and 16 <= value <= 27 and value * 2 == int(value * 2)
+    return (
+        type(value) in (int, float)
+        and MINIMUM_TEMPERATURE_C <= value <= MAXIMUM_TEMPERATURE_C
+        and math.isfinite(value)
+        and value / TEMPERATURE_STEP_C == int(value / TEMPERATURE_STEP_C)
+    )
 
 
 class TemperatureControls:
@@ -63,7 +71,7 @@ class TemperatureControls:
 
     def _send(self, temperature: float) -> str:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.settimeout(30)
+            connection.settimeout(40)
             connection.connect(str(self.socket_path))
             connection.sendall(json.dumps({"temperatureC": temperature}).encode() + b"\n")
             with connection.makefile("rb") as response:
