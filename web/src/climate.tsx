@@ -14,8 +14,8 @@ export function Climate({ data, units }: { data: Snapshot | null; units: string 
     left?.quality === "fresh" && right?.quality === "fresh";
 
   useEffect(() => {
-    api<{ available: boolean; temperature: {minimumC: number; maximumC: number; stepC: number} }>("vehicle-controls")
-      .then((result) => { setAvailable(result.available); setLimits(result.temperature); })
+    api<{ available: boolean; connected: boolean; temperature: {minimumC: number; maximumC: number; stepC: number} }>("vehicle-controls")
+      .then((result) => { setAvailable(result.available); setLimits(result.temperature); setConnected(result.connected); })
       .catch(() => setAvailable(false));
   }, []);
 
@@ -30,12 +30,24 @@ export function Climate({ data, units }: { data: Snapshot | null; units: string 
     try {
       await request("connect");
       setConnected(true);
+      setCode("");
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Controls could not connect");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function disconnect() {
+    setBusy(true);
+    try {
+      await request("disconnect");
+      setConnected(false);
+      setCode("");
+      setMessage("");
+    } catch { setMessage("Controls could not disconnect"); }
+    finally { setBusy(false); }
   }
 
   async function change(delta: number) {
@@ -87,6 +99,9 @@ export function Climate({ data, units }: { data: Snapshot | null; units: string 
           onInput={(event) => setCode(event.currentTarget.value)} disabled={busy} /></label>
         <ion-button type="submit" disabled={busy || !code.trim()}>Connect</ion-button>
       </form>
+    </details>}
+    {available && connected && <details><summary>Controls</summary>
+      <ion-button fill="clear" disabled={busy} onClick={disconnect}>Disconnect controls</ion-button>
     </details>}
     {connected && !live && <p role="status">Waiting for live cabin readings</p>}
     {message && <p role="status">{message}</p>}

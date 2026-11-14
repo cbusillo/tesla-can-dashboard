@@ -9,7 +9,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Literal, Self
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -174,22 +174,41 @@ def create_app(
             raise HTTPException(404, "Controls are not connected")
         if request.headers.get("origin") not in allowed_origins:
             raise HTTPException(403, "Open controls from the dashboard")
-        if not controls.authenticated(request.headers.get("authorization", "")):
+        if not (
+            controls.authenticated(request.headers.get("authorization", ""))
+            or controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}")
+        ):
             raise HTTPException(401, "Connect controls with your access code")
         return controls
 
     @app.get("/api/vehicle-controls")
-    def controls_status() -> dict:
+    def controls_status(request: Request) -> dict:
         return {
             "available": controls is not None,
+            "connected": controls is not None and controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}"),
             "actions": ["temperature"] if controls else [],
             "temperature": {"minimumC": MINIMUM_TEMPERATURE_C, "maximumC": MAXIMUM_TEMPERATURE_C, "stepC": TEMPERATURE_STEP_C},
         }
 
     @app.post("/api/vehicle-controls/connect")
-    def connect_controls(request: Request) -> dict:
-        authorize_controls(request)
+    def connect_controls(request: Request, response: Response) -> dict:
+        controller = authorize_controls(request)
+        response.set_cookie(
+            "tesla_controls",
+            controller.token,
+            max_age=30 * 86400,
+            path="/api/vehicle-controls",
+            secure=True,
+            httponly=True,
+            samesite="strict",
+        )
         return {"connected": True}
+
+    @app.post("/api/vehicle-controls/disconnect")
+    def disconnect_controls(request: Request, response: Response) -> dict:
+        authorize_controls(request)
+        response.delete_cookie("tesla_controls", path="/api/vehicle-controls", secure=True, httponly=True, samesite="strict")
+        return {"connected": False}
 
     @app.post("/api/vehicle-controls/prepare")
     def prepare_temperature(request: Request) -> dict:

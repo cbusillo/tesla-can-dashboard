@@ -154,6 +154,30 @@ def test_helper_passes_only_fixed_command_and_keeps_target_out_of_arguments(tmp_
     assert options["env"]["TESLA_VIN"] == "synthetic-test-target"
 
 
+def test_browser_access_survives_reload_but_disconnect_and_rotation_revoke_it(
+    controller: TemperatureControls, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(controller.engine, "start", lambda: None)
+    origin = "https://dashboard.example"
+    app = create_app(controller.engine, tmp_path, allowed_origins={origin}, controls=controller)
+    with TestClient(app, base_url=origin) as client:
+        assert not client.get("/api/vehicle-controls").json()["connected"]
+        response = client.post(
+            "/api/vehicle-controls/connect", headers={"Origin": origin, "Authorization": f"Bearer {controller.token}"}
+        )
+        assert response.status_code == 200
+        assert controller.token not in response.text
+        assert client.get("/api/vehicle-controls").json()["connected"]
+        assert client.post("/api/vehicle-controls/prepare", headers={"Origin": origin}).status_code == 200
+        assert client.post("/api/vehicle-controls/prepare").status_code == 403
+        assert client.post("/api/vehicle-controls/disconnect", headers={"Origin": origin}).status_code == 200
+        assert not client.get("/api/vehicle-controls").json()["connected"]
+        client.cookies.set("tesla_controls", controller.token, path="/api/vehicle-controls")
+        controller.token = "replacement-test-code-that-invalidates-old-access"
+        assert not client.get("/api/vehicle-controls").json()["connected"]
+        assert client.post("/api/vehicle-controls/prepare", headers={"Origin": origin}).status_code == 401
+
+
 def test_busy_and_expired_changes_never_send(controller: TemperatureControls, monkeypatch) -> None:
     monkeypatch.setattr(controller, "_send", lambda _: pytest.fail("No command expected"))
     nonce = controller.issue_nonce()

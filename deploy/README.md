@@ -74,8 +74,10 @@ browser credential, not the vehicle key. Configure the dashboard with
 HTTPS origin. The helper cannot read or change dashboard configuration.
 To rotate browser access, replace only this access-code file and restart the
 dashboard; the vehicle key and helper do not change. Existing browser codes then fail.
-Connect controls once per page session using the disclosure in Cabin temperature.
-The code stays in page memory and is not placed in URLs, local storage or logs.
+Connect controls using the disclosure in Cabin temperature. An HTTPS-only,
+HttpOnly, SameSite=Strict cookie remembers access in that browser for 30 days.
+Disconnect controls clears it; rotating the access-code file revokes all browsers.
+The code is not placed in URLs, local storage or logs, and the input clears after connection.
 Use a trusted local network or authenticated HTTPS proxy, including for telemetry.
 
 Include the operator-qualified `UI_hvacReqTempSetpointLeft` and
