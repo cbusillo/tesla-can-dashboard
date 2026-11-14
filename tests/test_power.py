@@ -1,5 +1,6 @@
 import struct
 import time
+from pathlib import Path
 
 import pytest
 
@@ -7,6 +8,36 @@ from tesla_can_dashboard.analysis import analyze_recording
 from tesla_can_dashboard.decoder import Decoder
 from tesla_can_dashboard.engine import Engine
 from tesla_can_dashboard.recording import Frame, Recorder
+
+
+@pytest.mark.parametrize("unit,scale", [("kW", 0.01), ("W", 10)])
+def test_reported_power_limits_use_profile_units_and_keep_zero_regen(tmp_path: Path, unit: str, scale: float) -> None:
+    profile = tmp_path / "limits.dbc"
+    profile.write_text(f'''VERSION "synthetic limits"
+NS_ :
+BS_:
+BU_: TEST
+BO_ 601 Limits: 8 TEST
+ SG_ BMS_maxRegenPower : 0|16@1+ ({scale},0) [0|{60000 * scale}] "{unit}" TEST
+ SG_ BMS_maxDischargePower : 16|16@1+ ({scale},0) [0|{60000 * scale}] "{unit}" TEST
+VAL_ 601 BMS_maxRegenPower 65535 "SNA";
+VAL_ 601 BMS_maxDischargePower 65535 "SNA";
+''')
+    engine = Engine("can0", Recorder(tmp_path / "raw", reserve_bytes=0), profile)
+    acquired = time.monotonic_ns()
+    frame = Frame(601, struct.pack("<HH4x", 0, 23300), 1000, acquired)
+    engine.ingest(frame)
+    readings = engine.snapshot()["signals"]
+    assert readings["regenLimitKw"]["value"] == 0
+    assert readings["regenLimitKw"]["quality"] == "fresh"
+    assert readings["outputLimitKw"]["value"] == pytest.approx(233)
+    stale = engine.store.snapshot(now=acquired / 1e9 + 4)["signals"]
+    assert stale["outputLimitKw"]["quality"] == "stale"
+    assert stale["outputLimitKw"]["value"] == pytest.approx(233)
+    engine.ingest(Frame(601, struct.pack("<HH4x", 65535, 65535), 1001, acquired + 1))
+    missing = engine.snapshot()["signals"]
+    assert missing["regenLimitKw"]["value"] is None
+    assert missing["outputLimitKw"]["value"] is None
 
 
 @pytest.fixture

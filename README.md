@@ -89,6 +89,13 @@ and per-reading details stay collapsed until requested. Recording chunks are
 compared as saved; the table does not claim to combine them into whole trips.
 Operator profile identity, charging semantics and precision still require runtime qualification.
 
+Overview's Edit list also offers Battery output limit and Regen limit when the
+operator profile provides them. These are the battery's reported limits for its
+current operating mode. They are not measured motor power or a prediction of
+acceleration; parked limits can differ from driving limits. Missing or reserved
+readings stay unavailable, and held readings are marked stale. The same readings
+work in saved recordings and replay without changing power or energy analysis.
+
 Optional cabin controls use a separate private Bluetooth helper and an enrolled
 vehicle key. CAN remains receive-only. Both cabin setpoints can be decoded from
 a compatible operator profile; LO/HI are not presented as numeric temperatures.
