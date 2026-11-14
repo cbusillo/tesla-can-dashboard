@@ -45,3 +45,43 @@ Rollback stops only this application's unit and returns the proxy/port to the
 previous working service. Keep saved sessions. Check boot enablement and the
 next natural power cycle separately; an active service alone does not prove
 that it started at boot.
+
+## Optional Bluetooth temperature controls
+
+Use this only after enrolling and qualifying a key with Tesla's official
+vehicle-command SDK on the target car. Install its `tesla-control` binary under
+the root-private key directory's `bin/`, with `key.pem` and a private `vin` file.
+Never copy the key into the web service's directory or expose SDK output to clients.
+The helper accepts only a temperature number and checks its local peer's UID.
+It has no network listener, arbitrary-command option or automatic retry.
+
+Adapt `tesla-temperature-helper.service` to the installed paths and account IDs.
+Its private runtime directory must be traversable by the dashboard group and its
+socket writable only by root and that group. Systemd removes the runtime socket
+on service stop. The helper restores the Bluetooth soft-block state after each
+bounded attempt; stopping it forcibly during an attempt requires checking that state.
+The service uses the installed SDK with session caching disabled.
+
+Generate a random access code of at least 32 characters on the target host into
+a separate file readable only by root and the dashboard account. This is a
+browser credential, not the vehicle key. Configure the dashboard with
+`--controls-socket /run/tesla-temperature/helper.sock` and
+`--controls-token-file /absolute/private/access-code` plus the actual allowed
+HTTPS origin. The helper cannot read or change dashboard configuration.
+Connect controls once per page session using the disclosure in Cabin temperature.
+The code stays in page memory and is not placed in URLs, local storage or logs.
+Use a trusted local network or authenticated HTTPS proxy, including for telemetry.
+
+Include the operator-qualified `UI_hvacReqTempSetpointLeft` and
+`UI_hvacReqTempSetpointRight` signals in the installed DBC. Units C, degC, DegC,
+deg C and °C are accepted. Frame length must match actual captures; a newer DBC
+is not automatically compatible with all car firmware. Keep the existing qualified
+battery, cell and driving definitions when extending a profile.
+
+The UI exposes only both-zone temperature changes, without turning climate on.
+Startup, reconnect, page reload and replay never send a vehicle command. Controls
+require a live receiver with fresh valid cabin setpoints. Nonces expire after a
+minute and are consumed before any attempt. An unknown outcome is not retried;
+the next request must follow an explicit user action and current car readings.
+Rollback removes both dashboard control flags and stops/disables only this helper.
+The enrolled key can remain private on the host or be revoked in the car by its owner.

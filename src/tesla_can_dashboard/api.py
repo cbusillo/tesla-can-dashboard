@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .analysis import AnalysisLimitError
 from .battery_history import BatteryHistory
+from .controls import TemperatureControls
 from .engine import Engine
 from .recording import SESSION_ID
 from .signals import CATALOG
@@ -75,6 +76,12 @@ class ReplayRequest(BaseModel):
         return value
 
 
+class TemperatureRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    temperatureC: float = Field(ge=16, le=27, multiple_of=0.5, allow_inf_nan=False)
+    nonce: str = Field(min_length=1, max_length=64)
+
+
 class BrowserReport(BaseModel):
     browser: str = Field(max_length=1024)
     updates: int = Field(ge=0, le=1000000)
@@ -107,6 +114,7 @@ def create_app(
     assets: Path | None = None,
     allowed_origins: set[str] | None = None,
     designs: Path | None = None,
+    controls: TemperatureControls | None = None,
 ) -> FastAPI:
     allowed_origins = allowed_origins or {"http://127.0.0.1:8088", "http://localhost:8088"}
     reports: deque[dict] = deque(maxlen=20)
@@ -149,9 +157,39 @@ def create_app(
         return {
             "status": "ok",
             "receiveOnly": True,
+            "bluetoothControls": controls is not None,
             "mode": "live" if engine.interface else "demonstration",
             "connection": engine.store.snapshot()["connection"]["state"] if engine.interface else "not-connected",
         }
+
+    def authorize_controls(request: Request) -> TemperatureControls:
+        if controls is None:
+            raise HTTPException(404, "Controls are not connected")
+        if request.headers.get("origin") not in allowed_origins:
+            raise HTTPException(403, "Open controls from the dashboard")
+        if not controls.authenticated(request.headers.get("authorization", "")):
+            raise HTTPException(401, "Connect controls with your access code")
+        return controls
+
+    @app.get("/api/vehicle-controls")
+    def controls_status() -> dict:
+        return {"available": controls is not None, "actions": ["temperature"] if controls else []}
+
+    @app.post("/api/vehicle-controls/prepare")
+    def prepare_temperature(request: Request) -> dict:
+        controller = authorize_controls(request)
+        try:
+            return {"nonce": controller.issue_nonce()}
+        except ValueError as error:
+            raise HTTPException(429, str(error)) from None
+
+    @app.post("/api/vehicle-controls/temperature")
+    def change_temperature(body: TemperatureRequest, request: Request) -> dict:
+        controller = authorize_controls(request)
+        try:
+            return controller.change(body.temperatureC, body.nonce)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
 
     @app.get("/api/snapshot")
     @app.get("/snapshot")
@@ -283,7 +321,7 @@ def create_app(
         return {"checks": list(reports)}
 
     @app.get("/control", response_class=HTMLResponse)
-    def controls() -> str:
+    def browser_controls_page() -> str:
         return CONTROL_PAGE
 
     if designs is not None and designs.is_dir():

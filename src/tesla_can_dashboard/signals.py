@@ -29,6 +29,8 @@ SIGNALS = (
     SignalDefinition("chargeLimitPercent", "Charge limit", "%", "charging", 0, 100, 30),
     SignalDefinition("driveGear", "Gear (1 P, 2 R, 3 N, 4 D)", "", "drive", 1, 4, 0.5),
     SignalDefinition("speedKmh", "Speed", "km/h", "drive", 0, 450),
+    SignalDefinition("driverTemperatureC", "Driver temperature", "°C", "climate", 15.5, 27.5),
+    SignalDefinition("passengerTemperatureC", "Passenger temperature", "°C", "climate", 15.5, 27.5),
 )
 CATALOG = {definition.key: definition for definition in SIGNALS}
 

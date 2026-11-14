@@ -86,8 +86,17 @@ Sessions → Review can compare two saved sessions for estimated energy used,
 energy regained, peak draw/regen and driving-data coverage. Compare sessions
 and per-reading details stay collapsed until requested. Recording chunks are
 compared as saved; the table does not claim to combine them into whole trips.
-Operator profile identity, charging semantics and precision still require runtime qualification. Convenience
-controls are not implemented. No vehicle command endpoint exists.
+Operator profile identity, charging semantics and precision still require runtime qualification.
+
+Optional cabin controls use a separate private Bluetooth helper and an enrolled
+vehicle key. CAN remains receive-only. Both cabin setpoints can be decoded from
+a compatible operator profile; LO/HI are not presented as numeric temperatures.
+The temperature control sets both sides together, in half-degree steps from
+16–27°C. Each manual change requires an access code and a single-use request.
+Fresh CAN readings after the request confirm the resulting settings. A Bluetooth
+acknowledgement alone displays Sent; a timeout stays unconfirmed and is never
+retried automatically. Replay and stale or missing cabin readings disable changes.
+Controls remain disabled unless explicitly configured; see [installation](deploy/README.md#optional-bluetooth-temperature-controls).
 
 Charging → History shows recorded pack energy and cell balance. Live battery
 observations are saved every five minutes independently of raw CAN recording

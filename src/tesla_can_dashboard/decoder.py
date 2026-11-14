@@ -22,6 +22,8 @@ SIGNAL_NAMES = {
     "DI_gear": "driveGear",
     "PCS_chgInputPower": "chargingPowerKw",
     "UI_chargeTerminationPct": "chargeLimitPercent",
+    "UI_hvacReqTempSetpointLeft": "driverTemperatureC",
+    "UI_hvacReqTempSetpointRight": "passengerTemperatureC",
 }
 UNIT_FACTORS: dict[str, dict[str | None, float]] = {
     "voltageV": {"V": 1, "mV": 0.001},
@@ -35,6 +37,8 @@ UNIT_FACTORS: dict[str, dict[str | None, float]] = {
     "driveGear": {None: 1, "": 1},
     "chargingPowerKw": {"kW": 1, "W": 0.001},
     "chargeLimitPercent": {"%": 1},
+    "driverTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
+    "passengerTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
 }
 GEARS = {"DI_GEAR_P": 1, "DI_GEAR_R": 2, "DI_GEAR_N": 3, "DI_GEAR_D": 4}
 CELL_NAME = re.compile(r"BMS_brickVoltage(\d+)$")
@@ -129,6 +133,8 @@ class Decoder:
                 factor = UNIT_FACTORS[key].get(signal.unit)
                 if factor is None:
                     continue
+                if key in {"driverTemperatureC", "passengerTemperatureC"} and number in {15, 28}:
+                    number = None
                 if key == "driveGear":
                     if number is None:
                         values[key] = None
