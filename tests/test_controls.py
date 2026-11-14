@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 from fastapi.testclient import TestClient
@@ -195,7 +196,8 @@ def test_missing_helper_is_not_reported_as_an_uncertain_vehicle_command(controll
 def test_helper_wire_reply_preserves_acknowledgement_and_uncertainty(
     controller: TemperatureControls, reply: bytes, expected: str
 ) -> None:
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+    with TemporaryDirectory(prefix="tc-", dir="/tmp") as directory, socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        controller.socket_path = Path(directory) / "s"
         listener.bind(str(controller.socket_path))
         listener.listen(1)
 
