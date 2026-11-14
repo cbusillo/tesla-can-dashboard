@@ -129,6 +129,11 @@ class SignalStore:
             else [],
         }
 
+    def is_connected(self, now: float | None = None) -> bool:
+        now = time.monotonic() if now is None else now
+        with self.lock:
+            return self.last_frame_at is not None and now - self.last_frame_at <= 3
+
     def snapshot(self, now: float | None = None) -> dict:
         now = time.monotonic() if now is None else now
         with self.lock:
@@ -143,11 +148,7 @@ class SignalStore:
             fresh_cells = [cell["value"] for cell in cells if cell["quality"] == "fresh"]
             age = None if self.last_frame_at is None else max(0, now - self.last_frame_at)
             state = (
-                "waiting"
-                if age is None and not self.receiver_error
-                else "connected"
-                if age is not None and age <= 3
-                else "disconnected"
+                "waiting" if age is None and not self.receiver_error else "connected" if self.is_connected(now) else "disconnected"
             )
             return {
                 "mode": "live",

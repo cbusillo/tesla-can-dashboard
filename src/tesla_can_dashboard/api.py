@@ -18,7 +18,16 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .analysis import AnalysisLimitError
 from .battery_history import BatteryHistory
-from .controls import MAXIMUM_TEMPERATURE_C, MINIMUM_TEMPERATURE_C, TEMPERATURE_STEP_C, TemperatureControls, valid_temperature
+from .controls import (
+    MAXIMUM_CHARGE_LIMIT_PERCENT,
+    MAXIMUM_TEMPERATURE_C,
+    MINIMUM_CHARGE_LIMIT_PERCENT,
+    MINIMUM_TEMPERATURE_C,
+    TEMPERATURE_STEP_C,
+    VehicleControls,
+    valid_charge_limit,
+    valid_temperature,
+)
 from .engine import Engine
 from .recording import SESSION_ID
 from .signals import CATALOG
@@ -90,6 +99,19 @@ class TemperatureRequest(BaseModel):
         return value
 
 
+class ChargeLimitRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    percent: int = Field(strict=True)
+    nonce: str = Field(min_length=1, max_length=64)
+
+    @field_validator("percent")
+    @classmethod
+    def supported_limit(cls, value: int) -> int:
+        if not valid_charge_limit(value):
+            raise ValueError("Choose a whole percentage from 50 to 100")
+        return value
+
+
 class BrowserReport(BaseModel):
     browser: str = Field(max_length=1024)
     updates: int = Field(ge=0, le=1000000)
@@ -122,7 +144,7 @@ def create_app(
     assets: Path | None = None,
     allowed_origins: set[str] | None = None,
     designs: Path | None = None,
-    controls: TemperatureControls | None = None,
+    controls: VehicleControls | None = None,
 ) -> FastAPI:
     allowed_origins = allowed_origins or {"http://127.0.0.1:8088", "http://localhost:8088"}
     if controls is not None:
@@ -186,7 +208,7 @@ def create_app(
             or controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}")
         )
 
-    def authorize_controls(request: Request) -> TemperatureControls:
+    def authorize_controls(request: Request) -> VehicleControls:
         if controls is None:
             raise HTTPException(404, "Controls are not connected")
         if not has_controls_access(request):
@@ -198,8 +220,9 @@ def create_app(
         return {
             "available": controls is not None,
             "connected": has_controls_access(request),
-            "actions": ["temperature"] if controls else [],
+            "actions": ["temperature", "charge-limit"] if controls else [],
             "temperature": {"minimumC": MINIMUM_TEMPERATURE_C, "maximumC": MAXIMUM_TEMPERATURE_C, "stepC": TEMPERATURE_STEP_C},
+            "chargeLimit": {"minimumPercent": MINIMUM_CHARGE_LIMIT_PERCENT, "maximumPercent": MAXIMUM_CHARGE_LIMIT_PERCENT},
         }
 
     @app.post("/api/vehicle-controls/connect")
@@ -222,7 +245,7 @@ def create_app(
         return {"connected": False}
 
     @app.post("/api/vehicle-controls/prepare")
-    def prepare_temperature(request: Request) -> dict:
+    def prepare_control(request: Request) -> dict:
         controller = authorize_controls(request)
         try:
             return {"nonce": controller.issue_nonce()}
@@ -234,6 +257,14 @@ def create_app(
         controller = authorize_controls(request)
         try:
             return controller.change(body.temperatureC, body.nonce)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.post("/api/vehicle-controls/charge-limit")
+    def change_charge_limit(body: ChargeLimitRequest, request: Request) -> dict:
+        controller = authorize_controls(request)
+        try:
+            return controller.change_charge_limit(body.percent, body.nonce)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
 

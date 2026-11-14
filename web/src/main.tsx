@@ -47,6 +47,8 @@ import {
 import { Metric, Page } from "./dashboard";
 import { SessionAnalysis } from "./session-analysis";
 import { Climate } from "./climate";
+import { ChargeLimit } from "./charge-limit";
+import { useVehicleControls } from "./vehicle-controls";
 import "./style.css";
 initialize({ mode: "ios", animated: false });
 addIcons({
@@ -191,6 +193,7 @@ function useDashboard() {
   };
 }
 function App() {
+  const vehicleControls = useVehicleControls();
   const {
     data,
     catalog,
@@ -406,7 +409,7 @@ function App() {
           }
         >
           <main class="overview">
-            <Climate data={data} units={layout.units} />
+            <Climate data={data} units={layout.units} controls={vehicleControls} />
             {!catalog.length && <p role="status">Loading instruments…</p>}
             <div class="charge-context">
               <div class="charge-level">
@@ -786,12 +789,8 @@ function App() {
                   reading={signals.chargingPowerKw}
                   units={layout.units}
                 />
-                <Metric
-                  label="Charge limit"
-                  reading={signals.chargeLimitPercent}
-                  units={layout.units}
-                />
               </div>
+              <ChargeLimit data={data} controls={vehicleControls} active={tab === "charging" && !batteryHistory} />
             </div>
             <div hidden={!batteryHistory}>
               <BatteryHistory

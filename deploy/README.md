@@ -92,10 +92,19 @@ deg C and °C are accepted. Frame length must match actual captures; a newer DBC
 is not automatically compatible with all car firmware. Keep the existing qualified
 battery, cell and driving definitions when extending a profile.
 
-The UI exposes only both-zone temperature changes, without turning climate on.
+The UI exposes both-zone temperature and charge-limit changes. It does not
+send charging start/stop, current, schedule, seat or climate on/off commands.
 Startup, reconnect, page reload and replay never send a vehicle command. Controls
 require a live receiver with fresh valid cabin setpoints. Nonces expire after a
 minute and are consumed before any attempt. An unknown outcome is not retried;
 the next request must follow an explicit user action and current car readings.
 Rollback removes both dashboard control flags and stops/disables only this helper.
 The enrolled key can remain private on the host or be revoked in the car by its owner.
+
+Charging controls require fresh `UI_chargeTerminationPct` from the compatible
+profile and an active live CAN connection. Their shared lock, single-use requests,
+bounded execution, access code and post-request CAN confirmation are the same as
+for temperature. An SDK acknowledgement alone never claims confirmation. A BLE
+vehicle-state query is not required: it can time out even after a successful
+command. Existing health fields retain their meanings; `bluetoothControls`
+reports whether the separate convenience helper is configured.
