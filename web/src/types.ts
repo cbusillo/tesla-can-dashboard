@@ -114,6 +114,15 @@ export class ApiError extends Error {
   }
 }
 
+export function nextCabinTemperature(
+  driver: number, passenger: number, direction: -1 | 1,
+  limits: { minimumC: number; maximumC: number; stepC: number },
+): number | null {
+  const baseline = direction < 0 ? Math.min(driver, passenger) : Math.max(driver, passenger);
+  const target = Math.round((baseline + direction * limits.stepC) / limits.stepC) * limits.stepC;
+  return Number.isFinite(target) && target >= limits.minimumC && target <= limits.maximumC ? target : null;
+}
+
 export async function api<T>(
   path: string,
   method = "GET",

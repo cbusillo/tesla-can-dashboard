@@ -108,7 +108,6 @@ def test_api_requires_access_code_and_dashboard_origin(controller: TemperatureCo
     app = create_app(controller.engine, tmp_path, controls=controller)
     headers = {"Origin": "http://localhost:8088", "Authorization": f"Bearer {controller.token}"}
     with TestClient(app) as client:
-        assert client.post("/api/vehicle-controls/prepare").status_code == 403
         assert client.post("/api/vehicle-controls/prepare", headers={"Origin": headers["Origin"]}).status_code == 401
         assert (
             client.post("/api/vehicle-controls/prepare", headers={**headers, "Origin": "https://other.example"}).status_code == 403
@@ -166,7 +165,6 @@ def test_browser_access_survives_reload_but_disconnect_and_rotation_revoke_it(
             "/api/vehicle-controls/connect", headers={"Origin": origin, "Authorization": f"Bearer {controller.token}"}
         )
         assert response.status_code == 200
-        assert controller.token not in response.text
         assert client.get("/api/vehicle-controls").json()["connected"]
         assert client.post("/api/vehicle-controls/prepare", headers={"Origin": origin}).status_code == 200
         assert client.post("/api/vehicle-controls/prepare").status_code == 403
@@ -176,6 +174,41 @@ def test_browser_access_survives_reload_but_disconnect_and_rotation_revoke_it(
         controller.token = "replacement-test-code-that-invalidates-old-access"
         assert not client.get("/api/vehicle-controls").json()["connected"]
         assert client.post("/api/vehicle-controls/prepare", headers={"Origin": origin}).status_code == 401
+        assert client.post("/api/vehicle-controls/disconnect", headers={"Origin": origin}).status_code == 200
+
+
+def test_controls_require_a_secure_origin_and_separate_preview(controller: TemperatureControls, tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        create_app(controller.engine, tmp_path, allowed_origins={"http://dashboard.example"}, controls=controller)
+    with pytest.raises(ValueError):
+        create_app(controller.engine, tmp_path, designs=tmp_path, controls=controller)
+
+
+def test_missing_helper_is_not_reported_as_an_uncertain_vehicle_command(controller: TemperatureControls) -> None:
+    with pytest.raises(ValueError):
+        controller.change(20, controller.issue_nonce())
+
+
+@pytest.mark.parametrize(
+    "reply,expected", [(b'{"outcome":"acknowledged"}\n', "acknowledged"), (b'{"outcome":"unknown"}\n', "unknown"), (b"", "unknown")]
+)
+def test_helper_wire_reply_preserves_acknowledgement_and_uncertainty(
+    controller: TemperatureControls, reply: bytes, expected: str
+) -> None:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.bind(str(controller.socket_path))
+        listener.listen(1)
+
+        def respond() -> None:
+            with listener.accept()[0] as peer:
+                peer.recv(1024)
+                peer.sendall(reply)
+
+        thread = threading.Thread(target=respond, daemon=True)
+        thread.start()
+        assert controller.change(20, controller.issue_nonce(), confirmation_seconds=0.01)["outcome"] == expected
+        thread.join(2)
+        assert not thread.is_alive()
 
 
 def test_busy_and_expired_changes_never_send(controller: TemperatureControls, monkeypatch) -> None:

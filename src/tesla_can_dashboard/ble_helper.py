@@ -14,8 +14,9 @@ from .controls import valid_temperature
 
 
 class BluetoothTemperature:
-    def __init__(self, key_directory: Path) -> None:
+    def __init__(self, key_directory: Path, log_path: Path | None = None) -> None:
         self.directory = key_directory
+        self.log_path = log_path
 
     @staticmethod
     def _radio(*arguments: str) -> str:
@@ -32,26 +33,27 @@ class BluetoothTemperature:
                 self._radio("unblock", "bluetooth")
             environment = {key: value for key, value in os.environ.items() if not key.startswith("TESLA_")}
             environment["TESLA_VIN"] = (self.directory / "vin").read_text().strip()
-            result = subprocess.run(
-                [
-                    str(self.directory / "bin/tesla-control"),
-                    "-ble",
-                    "-key-file",
-                    str(self.directory / "key.pem"),
-                    "-disable-session-cache",
-                    "-connect-timeout",
-                    "10s",
-                    "-command-timeout",
-                    "10s",
-                    "climate-set-temp",
-                    f"{temperature:g}C",
-                ],
-                env=environment,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=25,
-                check=False,
-            )
+            with (self.log_path or Path(os.devnull)).open("w") as output:
+                result = subprocess.run(
+                    [
+                        str(self.directory / "bin/tesla-control"),
+                        "-ble",
+                        "-key-file",
+                        str(self.directory / "key.pem"),
+                        "-disable-session-cache",
+                        "-connect-timeout",
+                        "10s",
+                        "-command-timeout",
+                        "10s",
+                        "climate-set-temp",
+                        f"{temperature:g}C",
+                    ],
+                    env=environment,
+                    stdout=output,
+                    stderr=subprocess.STDOUT,
+                    timeout=25,
+                    check=False,
+                )
             if result.returncode == 0:
                 outcome = "acknowledged"
         finally:
@@ -74,6 +76,7 @@ class TemperatureHandler(socketserver.StreamRequestHandler):
         self.connection.settimeout(3)
         _, uid, _ = struct.unpack("3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
         if uid != self.server.allowed_uid:
+            logging.getLogger(__name__).warning("Rejected a temperature request from an unexpected local identity")
             return
         outcome = {"outcome": "unknown"}
         try:
@@ -98,7 +101,9 @@ def main() -> None:
     gid = grp.getgrnam(args.socket_group).gr_gid
     if uid == 0 or uid == 65534 or gid == 65534:
         parser.error("Use a dedicated dashboard account and group")
-    with TemperatureServer(args.socket, uid, BluetoothTemperature(args.key_directory)) as server:
+    with TemperatureServer(
+        args.socket, uid, BluetoothTemperature(args.key_directory, args.socket.parent / "last-attempt.log")
+    ) as server:
         os.chown(args.socket, 0, gid)
         os.chmod(args.socket, 0o660)
         server.serve_forever()

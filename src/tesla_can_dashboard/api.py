@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -124,6 +125,14 @@ def create_app(
     controls: TemperatureControls | None = None,
 ) -> FastAPI:
     allowed_origins = allowed_origins or {"http://127.0.0.1:8088", "http://localhost:8088"}
+    if controls is not None:
+        if designs is not None:
+            raise ValueError("Serve design previews separately from vehicle controls")
+        if any(
+            urlsplit(origin).scheme != "https" and urlsplit(origin).hostname not in {"127.0.0.1", "localhost", "::1"}
+            for origin in allowed_origins
+        ):
+            raise ValueError("Vehicle controls require HTTPS or a loopback origin")
     reports: deque[dict] = deque(maxlen=20)
     layout_path = data_directory / "layout.json"
     engine.battery_history = BatteryHistory(data_directory / "battery.sqlite3", reserve_bytes=engine.recorder.reserve_bytes)
@@ -145,7 +154,9 @@ def create_app(
     async def same_origin_changes(request: Request, call_next):
         if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
             origin = request.headers.get("origin")
-            if origin is not None and origin not in allowed_origins:
+            if (origin is not None and origin not in allowed_origins) or (
+                request.url.path.startswith("/api/vehicle-controls/") and origin is None
+            ):
                 return JSONResponse({"detail": "Unexpected request origin"}, status_code=403)
             try:
                 length = int(request.headers.get("content-length", "0"))
@@ -169,15 +180,16 @@ def create_app(
             "connection": engine.store.snapshot()["connection"]["state"] if engine.interface else "not-connected",
         }
 
+    def has_controls_access(request: Request) -> bool:
+        return controls is not None and (
+            controls.authenticated(request.headers.get("authorization", ""))
+            or controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}")
+        )
+
     def authorize_controls(request: Request) -> TemperatureControls:
         if controls is None:
             raise HTTPException(404, "Controls are not connected")
-        if request.headers.get("origin") not in allowed_origins:
-            raise HTTPException(403, "Open controls from the dashboard")
-        if not (
-            controls.authenticated(request.headers.get("authorization", ""))
-            or controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}")
-        ):
+        if not has_controls_access(request):
             raise HTTPException(401, "Connect controls with your access code")
         return controls
 
@@ -185,7 +197,7 @@ def create_app(
     def controls_status(request: Request) -> dict:
         return {
             "available": controls is not None,
-            "connected": controls is not None and controls.authenticated(f"Bearer {request.cookies.get('tesla_controls', '')}"),
+            "connected": has_controls_access(request),
             "actions": ["temperature"] if controls else [],
             "temperature": {"minimumC": MINIMUM_TEMPERATURE_C, "maximumC": MAXIMUM_TEMPERATURE_C, "stepC": TEMPERATURE_STEP_C},
         }
@@ -205,8 +217,7 @@ def create_app(
         return {"connected": True}
 
     @app.post("/api/vehicle-controls/disconnect")
-    def disconnect_controls(request: Request, response: Response) -> dict:
-        authorize_controls(request)
+    def disconnect_controls(response: Response) -> dict:
         response.delete_cookie("tesla_controls", path="/api/vehicle-controls", secure=True, httponly=True, samesite="strict")
         return {"connected": False}
 

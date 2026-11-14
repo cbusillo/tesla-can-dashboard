@@ -16,6 +16,10 @@ MAXIMUM_TEMPERATURE_C = 27
 TEMPERATURE_STEP_C = 0.5
 
 
+class HelperUnavailable(OSError):
+    pass
+
+
 def valid_temperature(value: object) -> bool:
     return (
         type(value) in (int, float)
@@ -72,7 +76,10 @@ class TemperatureControls:
     def _send(self, temperature: float) -> str:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
             connection.settimeout(40)
-            connection.connect(str(self.socket_path))
+            try:
+                connection.connect(str(self.socket_path))
+            except OSError as error:
+                raise HelperUnavailable from error
             connection.sendall(json.dumps({"temperatureC": temperature}).encode() + b"\n")
             with connection.makefile("rb") as response:
                 data = json.loads(response.readline(1024))
@@ -99,6 +106,8 @@ class TemperatureControls:
             started = time.monotonic()
             try:
                 acknowledgement = self._send(temperature)
+            except HelperUnavailable:
+                raise ValueError("Controls helper is unavailable; no change was sent") from None
             except (OSError, ValueError):
                 acknowledgement = "unknown"
             deadline = time.monotonic() + confirmation_seconds

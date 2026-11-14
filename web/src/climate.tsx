@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { api, ApiError, display, type Snapshot } from "./types";
+import { api, ApiError, display, nextCabinTemperature, type Snapshot } from "./types";
 
 export function Climate({ data, units }: { data: Snapshot | null; units: string }) {
   const [available, setAvailable] = useState(false);
@@ -50,11 +50,10 @@ export function Climate({ data, units }: { data: Snapshot | null; units: string 
     finally { setBusy(false); }
   }
 
-  async function change(delta: number) {
+  async function change(direction: -1 | 1) {
     if (!live || left?.value == null || right?.value == null || !limits) return;
-    const baseline = delta < 0 ? Math.min(left.value, right.value) : Math.max(left.value, right.value);
-    const target = Math.round((baseline + delta) / limits.stepC) * limits.stepC;
-    if (target < limits.minimumC || target > limits.maximumC) return;
+    const target = nextCabinTemperature(left.value, right.value, direction, limits);
+    if (target === null) return;
     setBusy(true);
     setMessage("Sending…");
     try {
@@ -86,9 +85,9 @@ export function Climate({ data, units }: { data: Snapshot | null; units: string 
         <span>Both sides</span>
         <div>
           <ion-button aria-label="Lower both temperatures" disabled={busy || !live || Math.min(left?.value ?? 0, right?.value ?? 0) <= limits.minimumC}
-            onClick={() => change(-limits.stepC)}>−</ion-button>
+            onClick={() => change(-1)}>−</ion-button>
           <ion-button aria-label="Raise both temperatures" disabled={busy || !live || Math.max(left?.value ?? 0, right?.value ?? 0) >= limits.maximumC}
-            onClick={() => change(limits.stepC)}>+</ion-button>
+            onClick={() => change(1)}>+</ion-button>
         </div>
       </div>}
     </div>
