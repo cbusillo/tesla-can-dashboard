@@ -125,12 +125,9 @@ test("rounded dial inputs preserve untouched limits and convert deliberate edits
     [-39, "°C"],
   ]) {
     const shown = formatDialLimit(value, unit, "imperial");
-    assert.equal(
-      canonicalDialLimit(shown, value, false, unit, "imperial"),
-      value,
-    );
+    assert.equal(canonicalDialLimit(shown, value, unit, "imperial"), value);
   }
   assert.equal(formatDialLimit(2, "bar", "imperial"), "29");
-  const edited = canonicalDialLimit("30", 2, true, "bar", "imperial");
+  const edited = canonicalDialLimit("30", 2, "bar", "imperial");
   assert.ok(edited > 2.06 && edited < 2.07);
 });

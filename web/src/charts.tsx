@@ -289,7 +289,7 @@ export function History({
         typeof v === "number"
           ? choices
             ? (choices[String(v)] ?? "—")
-            : v.toFixed(2)
+            : v.toFixed(decimalPlaces(reading?.unit || "", units))
           : "—",
     },
     xAxis: {

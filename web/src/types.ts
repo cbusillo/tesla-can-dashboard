@@ -95,11 +95,13 @@ export function formatDialLimit(value: number, unit: string, units: string) {
 export function canonicalDialLimit(
   input: string,
   original: number,
-  changed: boolean,
   unit: string,
   units: string,
 ) {
-  return changed ? toCanonical(Number(input), unit, units) : original;
+  const value = Number(input);
+  return value === Number(formatDialLimit(original, unit, units))
+    ? original
+    : toCanonical(value, unit, units);
 }
 export function display(
   reading: Reading | undefined,
