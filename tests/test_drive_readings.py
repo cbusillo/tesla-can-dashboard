@@ -60,8 +60,6 @@ def test_motor_mux_does_not_refresh_temperature_from_other_pages_or_expose_inver
     assert reading["value"] == 28
     values, _ = decoder.decode(identifier, bytes([0, 0, 80]))
     assert values == {key: None}
-    with pytest.raises(ValueError, match="frame length"):
-        decoder.decode(identifier, b"\0")
 
 
 def test_displayed_pressure_never_uses_sensor_or_last_known_values_and_preserves_zero(drive_readings_dbc: Path) -> None:

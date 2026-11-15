@@ -30,7 +30,8 @@ const History = lazy(() =>
 import {
   api,
   convert,
-  toCanonical,
+  formatDialLimit,
+  canonicalDialLimit,
   display,
   displayUnit,
   initialLayout,
@@ -207,6 +208,10 @@ function App() {
     [rangeMin, setRangeMin] = useState(""),
     [rangeMax, setRangeMax] = useState(""),
     [rangeAuto, setRangeAuto] = useState(true),
+    [rangeChanged, setRangeChanged] = useState({
+      minimum: false,
+      maximum: false,
+    }),
     [formError, setFormError] = useState(""),
     [chooseOpen, setChooseOpen] = useState(false),
     [deviceDark, setDeviceDark] = useState(
@@ -239,22 +244,19 @@ function App() {
     if (!definition) return;
     const range = layout.ranges[key];
     setRangeAuto(!range);
+    setRangeChanged({ minimum: false, maximum: false });
     setRangeMin(
-      String(
-        convert(
-          range?.minimum ?? definition.minimum,
-          definition.unit,
-          layout.units,
-        ),
+      formatDialLimit(
+        range?.minimum ?? definition.minimum,
+        definition.unit,
+        layout.units,
       ),
     );
     setRangeMax(
-      String(
-        convert(
-          range?.maximum ?? definition.maximum,
-          definition.unit,
-          layout.units,
-        ),
+      formatDialLimit(
+        range?.maximum ?? definition.maximum,
+        definition.unit,
+        layout.units,
       ),
     );
     setFormError("");
@@ -266,8 +268,21 @@ function App() {
     const ranges = { ...layout.ranges };
     if (rangeAuto) delete ranges[definition.key];
     else {
-      const lo = Number(rangeMin),
-        hi = Number(rangeMax);
+      const previous = ranges[definition.key] ?? definition;
+      const lo = canonicalDialLimit(
+          rangeMin,
+          previous.minimum,
+          rangeChanged.minimum,
+          definition.unit,
+          layout.units,
+        ),
+        hi = canonicalDialLimit(
+          rangeMax,
+          previous.maximum,
+          rangeChanged.maximum,
+          definition.unit,
+          layout.units,
+        );
       if (
         rangeMin.trim() === "" ||
         rangeMax.trim() === "" ||
@@ -279,8 +294,8 @@ function App() {
         return;
       }
       ranges[definition.key] = {
-        minimum: toCanonical(lo, definition.unit, layout.units),
-        maximum: toCanonical(hi, definition.unit, layout.units),
+        minimum: lo,
+        maximum: hi,
       };
     }
     if (await save({ ...layout, ranges })) setEditKey(null);
@@ -544,7 +559,7 @@ function App() {
                       label={instrumentLabel(historyKey)}
                       staleAfter={historyDefinition?.stale_after}
                       choices={historyDefinition?.choices}
-                      height={130}
+                      height={100}
                     />
                   </Suspense>
                 )}
@@ -809,7 +824,13 @@ function App() {
                     label={`Minimum (${rangeUnit})`}
                     type="number"
                     value={rangeMin}
-                    onionInput={(e) => setRangeMin(e.detail.value || "")}
+                    onionInput={(e) => {
+                      setRangeMin(e.detail.value || "");
+                      setRangeChanged((current) => ({
+                        ...current,
+                        minimum: true,
+                      }));
+                    }}
                   />
                 </ion-item>
                 <ion-item>
@@ -817,7 +838,13 @@ function App() {
                     label={`Maximum (${rangeUnit})`}
                     type="number"
                     value={rangeMax}
-                    onionInput={(e) => setRangeMax(e.detail.value || "")}
+                    onionInput={(e) => {
+                      setRangeMax(e.detail.value || "");
+                      setRangeChanged((current) => ({
+                        ...current,
+                        maximum: true,
+                      }));
+                    }}
                   />
                 </ion-item>
               </>

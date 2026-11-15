@@ -56,40 +56,23 @@ export const initialLayout: Layout = {
   historyInstrument: "voltageV",
   ranges: {},
 };
-const barToPsi = 14.503773773;
+const usUnits: Record<string, { unit: string; scale: number; offset: number }> =
+  {
+    "°C": { unit: "°F", scale: 9 / 5, offset: 32 },
+    "km/h": { unit: "mph", scale: 1 / 1.609344, offset: 0 },
+    bar: { unit: "psi", scale: 14.503773773, offset: 0 },
+  };
 
 export function convert(value: number, unit: string, units: string) {
-  return units === "imperial"
-    ? unit === "°C"
-      ? (value * 9) / 5 + 32
-      : unit === "km/h"
-        ? value / 1.609344
-        : unit === "bar"
-          ? value * barToPsi
-          : value
-    : value;
+  const conversion = units === "imperial" ? usUnits[unit] : undefined;
+  return conversion ? value * conversion.scale + conversion.offset : value;
 }
 export function toCanonical(value: number, unit: string, units: string) {
-  return units === "imperial"
-    ? unit === "°C"
-      ? ((value - 32) * 5) / 9
-      : unit === "km/h"
-        ? value * 1.609344
-        : unit === "bar"
-          ? value / barToPsi
-          : value
-    : value;
+  const conversion = units === "imperial" ? usUnits[unit] : undefined;
+  return conversion ? (value - conversion.offset) / conversion.scale : value;
 }
 export function displayUnit(unit: string, units: string) {
-  return units === "imperial"
-    ? unit === "°C"
-      ? "°F"
-      : unit === "km/h"
-        ? "mph"
-        : unit === "bar"
-          ? "psi"
-          : unit
-    : unit;
+  return units === "imperial" ? (usUnits[unit]?.unit ?? unit) : unit;
 }
 export function usableReading(
   reading: Reading | undefined,
@@ -103,6 +86,20 @@ export function usableReading(
 }
 export function decimalPlaces(unit: string, units: string) {
   return unit === "V" || (unit === "bar" && units !== "imperial") ? 2 : 1;
+}
+export function formatDialLimit(value: number, unit: string, units: string) {
+  return String(
+    Number(convert(value, unit, units).toFixed(decimalPlaces(unit, units))),
+  );
+}
+export function canonicalDialLimit(
+  input: string,
+  original: number,
+  changed: boolean,
+  unit: string,
+  units: string,
+) {
+  return changed ? toCanonical(Number(input), unit, units) : original;
 }
 export function display(
   reading: Reading | undefined,
