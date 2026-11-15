@@ -44,13 +44,19 @@ export function Battery({
         </div>
         <div class="battery-energy">
           <div class={signals.remainingEnergyKwh?.quality || "unavailable"}>
-            <span>Remaining</span>
+            <span>
+              Remaining
+              {signals.remainingEnergyKwh?.quality === "stale" && " · Held"}
+            </span>
             <strong>
               <Value reading={signals.remainingEnergyKwh} units={units} />
             </strong>
           </div>
           <div class={signals.fullPackEnergyKwh?.quality || "unavailable"}>
-            <span>Full pack</span>
+            <span>
+              Full pack
+              {signals.fullPackEnergyKwh?.quality === "stale" && " · Held"}
+            </span>
             <strong>
               <Value reading={signals.fullPackEnergyKwh} units={units} />
             </strong>
