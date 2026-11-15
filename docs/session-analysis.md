@@ -134,7 +134,10 @@ returns HTTP 200 with `quality: invalid`, reasons and empty run arrays; the UI
 must check quality before displaying measurements.
 
 `web/src/session-analysis.tsx` exports `SessionAnalysis({ sessions, activeId })`.
-It loads on an explicit Analyze action, cancels obsolete requests, hides
-invalid results, and displays unavailable data and sample resolution. It is integrated below saved sessions in the selected interface, using its
-day/night appearance and unit preference. Profile/source qualification and
-installation remain Supervisor work.
+It loads on an explicit Review action, cancels obsolete requests, hides invalid results,
+and displays unavailable data and sample resolution. The newest completed recording is selected
+initially. Review appears above collapsed recording management, with estimated energy first and
+one selectable observation chart. Performance expands automatically when runs are available;
+timing conventions and reading details stay behind disclosures. Comparison, export, replay and
+removal remain available. Day/night appearance and unit preference match the rest of the app.
+No reading is inferred from a gap, and no chart is created for an unavailable reading.

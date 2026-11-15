@@ -87,8 +87,10 @@ budget with `--recording-limit-mib` and export/remove recordings deliberately.
 A capture-start failure leaves the receiver/server running. The existing
 recorder rolls into completed chunks within the analysis limits and reports
 a full total budget without erasing older files.
-Sessions includes recording analysis with explicit measurement conventions,
-data-quality reasons and sampled battery curves.
+Sessions puts review above collapsed recording management. Estimated energy leads, followed
+by one selectable reading chart. Performance results expand when runs are available; timing
+conventions and reading details stay behind disclosures. Data-quality reasons, missing readings
+and sampled battery observations remain available without rendering every chart at once.
 Sessions → Review can compare two saved sessions for estimated energy used,
 energy regained, peak draw/regen and driving-data coverage. Compare sessions
 and per-reading details stay collapsed until requested. Recording chunks are
