@@ -36,6 +36,12 @@ SIGNALS = (
         "driveGear", "Gear", "", "drive", 1, 4, 0.5, {value: name.removeprefix("DI_GEAR_") for name, value in DRIVE_GEARS.items()}
     ),
     SignalDefinition("speedKmh", "Speed", "km/h", "drive", 0, 450),
+    SignalDefinition("frontMotorTemperatureC", "Front motor temperature", "°C", "drive", -39, 215),
+    SignalDefinition("rearMotorTemperatureC", "Rear motor temperature", "°C", "drive", -39, 215),
+    SignalDefinition("displayedFrontLeftPressureBar", "Front left displayed pressure", "bar", "tyres", 0, 6.35),
+    SignalDefinition("displayedFrontRightPressureBar", "Front right displayed pressure", "bar", "tyres", 0, 6.35),
+    SignalDefinition("displayedRearLeftPressureBar", "Rear left displayed pressure", "bar", "tyres", 0, 6.35),
+    SignalDefinition("displayedRearRightPressureBar", "Rear right displayed pressure", "bar", "tyres", 0, 6.35),
     SignalDefinition("driverTemperatureC", "Driver temperature", "°C", "climate", 15.5, 27.5),
     SignalDefinition("passengerTemperatureC", "Passenger temperature", "°C", "climate", 15.5, 27.5),
 )

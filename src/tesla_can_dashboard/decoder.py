@@ -26,6 +26,12 @@ SIGNAL_NAMES = {
     "UI_chargeTerminationPct": "chargeLimitPercent",
     "UI_hvacReqTempSetpointLeft": "driverTemperatureC",
     "UI_hvacReqTempSetpointRight": "passengerTemperatureC",
+    "DIF_statorT": "frontMotorTemperatureC",
+    "DIR_statorT": "rearMotorTemperatureC",
+    "VCSEC_TPMSDisplayPressureFL": "displayedFrontLeftPressureBar",
+    "VCSEC_TPMSDisplayPressureFR": "displayedFrontRightPressureBar",
+    "VCSEC_TPMSDisplayPressureRL": "displayedRearLeftPressureBar",
+    "VCSEC_TPMSDisplayPressureRR": "displayedRearRightPressureBar",
 }
 UNIT_FACTORS: dict[str, dict[str | None, float]] = {
     "voltageV": {"V": 1, "mV": 0.001},
@@ -43,6 +49,12 @@ UNIT_FACTORS: dict[str, dict[str | None, float]] = {
     "chargeLimitPercent": {"%": 1},
     "driverTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
     "passengerTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
+    "frontMotorTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
+    "rearMotorTemperatureC": {"deg C": 1, "degC": 1, "DegC": 1, "°C": 1, "C": 1},
+    "displayedFrontLeftPressureBar": {"bar": 1},
+    "displayedFrontRightPressureBar": {"bar": 1},
+    "displayedRearLeftPressureBar": {"bar": 1},
+    "displayedRearRightPressureBar": {"bar": 1},
 }
 CELL_NAME = re.compile(r"BMS_brickVoltage(\d+)$")
 INVALID_CHOICES = {"SNA", "INVALID", "NOT_AVAILABLE"}
@@ -189,6 +201,10 @@ class Decoder:
         if not isinstance(value, (int, float)) or not math.isfinite(value):
             return None
         if signal.minimum is not None and signal.maximum is not None and signal.minimum < signal.maximum:
+            if math.isclose(value, signal.minimum, rel_tol=1e-12, abs_tol=1e-12):
+                value = signal.minimum
+            if math.isclose(value, signal.maximum, rel_tol=1e-12, abs_tol=1e-12):
+                value = signal.maximum
             if not signal.minimum <= value <= signal.maximum:
                 return None
         choices = signal.choices

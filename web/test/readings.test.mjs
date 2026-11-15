@@ -29,10 +29,18 @@ const fresh = (value, unit = "A") => ({
 });
 
 test("categorical readings use supplied labels without making missing or invalid values readable", () => {
-  const choices = { "-2": "Idle", "18": "Running" };
+  const choices = { "-2": "Idle", 18: "Running" };
   assert.equal(display(fresh(-2), "metric", undefined, choices), choices[-2]);
-  assert.equal(display({ ...fresh(18), quality: "stale" }, "imperial", undefined, choices), choices[18]);
-  for (const reading of [undefined, fresh(99), { ...fresh(18), quality: "invalid" }, fresh(null)])
+  assert.equal(
+    display({ ...fresh(18), quality: "stale" }, "imperial", undefined, choices),
+    choices[18],
+  );
+  for (const reading of [
+    undefined,
+    fresh(99),
+    { ...fresh(18), quality: "invalid" },
+    fresh(null),
+  ])
     assert.equal(display(reading, "metric", undefined, choices), "—");
 });
 
@@ -90,12 +98,13 @@ test("nonfinite and unusable readings never become numeric displays", () => {
   assert.notEqual(display(fresh(0), "metric"), absent);
 });
 
-test("saved temperature and speed limits round trip through US units in canonical units", () => {
+test("saved temperature, speed and pressure limits round trip through US units in canonical units", () => {
   for (const [value, unit] of [
     [0, "°C"],
     [-20, "°C"],
     [80, "°C"],
     [120, "km/h"],
+    [3, "bar"],
   ]) {
     assert.ok(
       Math.abs(
@@ -103,4 +112,6 @@ test("saved temperature and speed limits round trip through US units in canonica
       ) < 1e-10,
     );
   }
+  assert.equal(display(fresh(3, "bar"), "imperial"), "43.5 psi");
+  assert.equal(display(fresh(3, "bar"), "metric"), "3.00 bar");
 });

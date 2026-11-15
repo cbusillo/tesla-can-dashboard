@@ -56,13 +56,17 @@ export const initialLayout: Layout = {
   historyInstrument: "voltageV",
   ranges: {},
 };
+const barToPsi = 14.503773773;
+
 export function convert(value: number, unit: string, units: string) {
   return units === "imperial"
     ? unit === "°C"
       ? (value * 9) / 5 + 32
       : unit === "km/h"
         ? value / 1.609344
-        : value
+        : unit === "bar"
+          ? value * barToPsi
+          : value
     : value;
 }
 export function toCanonical(value: number, unit: string, units: string) {
@@ -71,7 +75,9 @@ export function toCanonical(value: number, unit: string, units: string) {
       ? ((value - 32) * 5) / 9
       : unit === "km/h"
         ? value * 1.609344
-        : value
+        : unit === "bar"
+          ? value / barToPsi
+          : value
     : value;
 }
 export function displayUnit(unit: string, units: string) {
@@ -80,7 +86,9 @@ export function displayUnit(unit: string, units: string) {
       ? "°F"
       : unit === "km/h"
         ? "mph"
-        : unit
+        : unit === "bar"
+          ? "psi"
+          : unit
     : unit;
 }
 export function usableReading(
@@ -93,6 +101,9 @@ export function usableReading(
     (reading.quality === "fresh" || reading.quality === "stale")
   );
 }
+export function decimalPlaces(unit: string, units: string) {
+  return unit === "V" || (unit === "bar" && units !== "imperial") ? 2 : 1;
+}
 export function display(
   reading: Reading | undefined,
   units: string,
@@ -103,7 +114,7 @@ export function display(
   if (choices) return choices[String(reading.value)] ?? "—";
   return (
     convert(reading.value, reading.unit, units).toFixed(
-      decimals ?? (reading.unit === "V" ? 2 : 1),
+      decimals ?? decimalPlaces(reading.unit, units),
     ) +
     " " +
     displayUnit(reading.unit, units)
@@ -118,12 +129,21 @@ export class ApiError extends Error {
 }
 
 export function nextCabinTemperature(
-  driver: number, passenger: number, direction: -1 | 1,
+  driver: number,
+  passenger: number,
+  direction: -1 | 1,
   limits: { minimumC: number; maximumC: number; stepC: number },
 ): number | null {
-  const baseline = direction < 0 ? Math.min(driver, passenger) : Math.max(driver, passenger);
-  const target = Math.round((baseline + direction * limits.stepC) / limits.stepC) * limits.stepC;
-  return Number.isFinite(target) && target >= limits.minimumC && target <= limits.maximumC ? target : null;
+  const baseline =
+    direction < 0 ? Math.min(driver, passenger) : Math.max(driver, passenger);
+  const target =
+    Math.round((baseline + direction * limits.stepC) / limits.stepC) *
+    limits.stepC;
+  return Number.isFinite(target) &&
+    target >= limits.minimumC &&
+    target <= limits.maximumC
+    ? target
+    : null;
 }
 
 export async function api<T>(
@@ -134,7 +154,10 @@ export async function api<T>(
 ): Promise<T> {
   const response = await fetch("/api/" + path, {
     method,
-    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...options.headers },
+    headers: {
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...options.headers,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
   });
