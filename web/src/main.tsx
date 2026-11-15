@@ -30,7 +30,8 @@ const History = lazy(() =>
 import {
   api,
   convert,
-  toCanonical,
+  formatDialLimit,
+  canonicalDialLimit,
   display,
   displayUnit,
   initialLayout,
@@ -207,6 +208,12 @@ function App() {
     [rangeMin, setRangeMin] = useState(""),
     [rangeMax, setRangeMax] = useState(""),
     [rangeAuto, setRangeAuto] = useState(true),
+    [rangeBasis, setRangeBasis] = useState({
+      minimum: 0,
+      maximum: 1,
+      unit: "",
+      units: "metric",
+    }),
     [formError, setFormError] = useState(""),
     [chooseOpen, setChooseOpen] = useState(false),
     [deviceDark, setDeviceDark] = useState(
@@ -239,24 +246,15 @@ function App() {
     if (!definition) return;
     const range = layout.ranges[key];
     setRangeAuto(!range);
-    setRangeMin(
-      String(
-        convert(
-          range?.minimum ?? definition.minimum,
-          definition.unit,
-          layout.units,
-        ),
-      ),
-    );
-    setRangeMax(
-      String(
-        convert(
-          range?.maximum ?? definition.maximum,
-          definition.unit,
-          layout.units,
-        ),
-      ),
-    );
+    const basis = {
+      minimum: range?.minimum ?? definition.minimum,
+      maximum: range?.maximum ?? definition.maximum,
+      unit: definition.unit,
+      units: layout.units,
+    };
+    setRangeBasis(basis);
+    setRangeMin(formatDialLimit(basis.minimum, basis.unit, basis.units));
+    setRangeMax(formatDialLimit(basis.maximum, basis.unit, basis.units));
     setFormError("");
     setEditKey(key);
   }
@@ -266,8 +264,18 @@ function App() {
     const ranges = { ...layout.ranges };
     if (rangeAuto) delete ranges[definition.key];
     else {
-      const lo = Number(rangeMin),
-        hi = Number(rangeMax);
+      const lo = canonicalDialLimit(
+          rangeMin,
+          rangeBasis.minimum,
+          rangeBasis.unit,
+          rangeBasis.units,
+        ),
+        hi = canonicalDialLimit(
+          rangeMax,
+          rangeBasis.maximum,
+          rangeBasis.unit,
+          rangeBasis.units,
+        );
       if (
         rangeMin.trim() === "" ||
         rangeMax.trim() === "" ||
@@ -279,17 +287,14 @@ function App() {
         return;
       }
       ranges[definition.key] = {
-        minimum: toCanonical(lo, definition.unit, layout.units),
-        maximum: toCanonical(hi, definition.unit, layout.units),
+        minimum: lo,
+        maximum: hi,
       };
     }
     if (await save({ ...layout, ranges })) setEditKey(null);
   }
   const common = { status, toggleTheme: theme };
-  const rangeUnit = displayUnit(
-    catalog.find((d) => d.key === editKey)?.unit || "",
-    layout.units,
-  );
+  const rangeUnit = displayUnit(rangeBasis.unit, rangeBasis.units);
   const historyDefinition = catalog.find((d) => d.key === historyKey);
   const instrumentLabel = (key: string) =>
     catalog.find((definition) => definition.key === key)?.label || "Instrument";
@@ -544,7 +549,7 @@ function App() {
                       label={instrumentLabel(historyKey)}
                       staleAfter={historyDefinition?.stale_after}
                       choices={historyDefinition?.choices}
-                      height={130}
+                      height={100}
                     />
                   </Suspense>
                 )}

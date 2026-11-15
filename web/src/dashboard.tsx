@@ -2,6 +2,7 @@ import type { ComponentChildren } from "preact";
 import {
   convert,
   displayUnit,
+  decimalPlaces,
   usableReading,
   readingStatus,
   type Reading,
@@ -26,7 +27,7 @@ export function Value({
   return (
     <>
       {convert(reading.value, reading.unit, units).toFixed(
-        decimals ?? (reading.unit === "V" ? 2 : 1),
+        decimals ?? decimalPlaces(reading.unit, units),
       )}
       {showUnit && (
         <small class="reading-unit"> {displayUnit(reading.unit, units)}</small>

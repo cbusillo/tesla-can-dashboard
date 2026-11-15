@@ -20,6 +20,7 @@ import {
   convert,
   display,
   displayUnit,
+  decimalPlaces,
   readingStatus,
   usableReading,
   type DialRange,
@@ -194,7 +195,7 @@ export function Dial({
           ),
           fontFamily: getComputedStyle(document.documentElement).fontFamily,
           formatter: () =>
-            value === null ? "—" : value.toFixed(unit === "V" ? 2 : 1),
+            value === null ? "—" : value.toFixed(decimalPlaces(unit, units)),
         },
         data: [
           {
@@ -288,7 +289,7 @@ export function History({
         typeof v === "number"
           ? choices
             ? (choices[String(v)] ?? "—")
-            : v.toFixed(2)
+            : v.toFixed(decimalPlaces(reading?.unit || "", units))
           : "—",
     },
     xAxis: {

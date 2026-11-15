@@ -3,7 +3,7 @@ import { lazy, Suspense } from "preact/compat";
 const Chart = lazy(() =>
   import("./charts").then((module) => ({ default: module.Chart })),
 );
-import { convert, displayUnit, type Session } from "./types";
+import { convert, displayUnit, decimalPlaces, type Session } from "./types";
 import "./session-analysis.css";
 
 type Run = {
@@ -101,7 +101,7 @@ function explain(items: string[]) {
 function observed(value: number | null, unit: string, units = "metric") {
   if (value === null) return "Unavailable";
   if (unit === "kWh" && value > 0 && value < 0.001) return "<0.001 kWh";
-  return `${convert(value, unit, units).toFixed(unit === "kWh" ? 3 : 1)} ${displayUnit(unit, units)}`;
+  return `${convert(value, unit, units).toFixed(unit === "kWh" ? 3 : decimalPlaces(unit, units))} ${displayUnit(unit, units)}`;
 }
 function MeasurementCard({ measurement }: { measurement: Measurement }) {
   return (
@@ -210,13 +210,15 @@ function EnergyComparison({
           </tr>
         </thead>
         <tbody>
-          {([
-            ["Energy used", "drawnKwh", "kWh"],
-            ["Energy regained", "regeneratedKwh", "kWh"],
-            ["Peak draw", "peakDrawKw", "kW"],
-            ["Peak regen", "peakRegenKw", "kW"],
-            ["Driving data", "coveredSeconds", "s"],
-          ] as const).map(([label, key, unit]) => (
+          {(
+            [
+              ["Energy used", "drawnKwh", "kWh"],
+              ["Energy regained", "regeneratedKwh", "kWh"],
+              ["Peak draw", "peakDrawKw", "kW"],
+              ["Peak regen", "peakRegenKw", "kW"],
+              ["Driving data", "coveredSeconds", "s"],
+            ] as const
+          ).map(([label, key, unit]) => (
             <tr key={key}>
               <th scope="row">{label}</th>
               <td>{observed(a?.[key] ?? null, unit)}</td>
@@ -435,7 +437,7 @@ export function SessionAnalysis({
                   </div>
                 </section>
               ))}
-              <h3>Battery and charging</h3>
+              <h3>Energy and readings</h3>
               {result.battery.energy &&
                 result.battery.energy.quality !== "unavailable" && (
                   <>
@@ -485,10 +487,10 @@ export function SessionAnalysis({
                           <details className="session-reading-details">
                             <summary>Details</summary>
                             <small>
-                            Observed{" "}
-                            {observed(signal.minimum, signal.unit, units)} to{" "}
-                            {observed(signal.maximum, signal.unit, units)} ·{" "}
-                            {signal.samples} samples · {signal.quality}
+                              Observed{" "}
+                              {observed(signal.minimum, signal.unit, units)} to{" "}
+                              {observed(signal.maximum, signal.unit, units)} ·{" "}
+                              {signal.samples} samples · {signal.quality}
                             </small>
                           </details>
                         </>

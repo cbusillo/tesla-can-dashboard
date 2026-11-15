@@ -102,6 +102,16 @@ acceleration; parked limits can differ from driving limits. Missing or reserved
 readings stay unavailable, and held readings are marked stale. The same readings
 work in saved recordings and replay without changing power or energy analysis.
 
+Optional instruments include front/rear motor temperatures and each wheel's
+displayed tyre pressure when the operator profile provides the compatible
+signals. Motor temperatures are stator readings; inverter readings with an
+unqualified quality flag are not exposed. Pressures mirror the car's display,
+which may repeat a stored value; receiving that display message does not prove
+that a tyre sensor just measured it. Raw sensor and last-known pressure fields
+are not substituted. Pressure uses bar in metric mode and psi in US mode;
+saved dial ranges remain in bar. Reserved values stay unavailable or invalid,
+and a missing message marks the last valid reading as held.
+
 Optional cabin controls use a separate private Bluetooth helper and an enrolled
 vehicle key. CAN remains receive-only. Both cabin setpoints can be decoded from
 a compatible operator profile; LO/HI are not presented as numeric temperatures.
