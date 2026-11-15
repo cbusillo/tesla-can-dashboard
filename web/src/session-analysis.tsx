@@ -183,6 +183,80 @@ function ObservationCurve({
     </Suspense>
   );
 }
+function RecordedReadings({
+  signals,
+  units,
+}: {
+  signals: Record<string, Observation>;
+  units: string;
+}) {
+  const [chosen, setChosen] = useState("");
+  const entries = Object.entries(signals);
+  const selected =
+    entries.find(([key]) => key === chosen) ??
+    entries.find(
+      ([key, signal]) => key === "batteryPowerKw" && signal.samples > 0,
+    ) ??
+    entries.find(([, signal]) => signal.samples > 0) ??
+    entries[0];
+  if (!selected) return <p>No readings recorded</p>;
+  const [key, signal] = selected;
+  return (
+    <section aria-label="Recorded readings" className="recorded-readings">
+      <div className="session-picker">
+        <label>
+          Reading
+          <select
+            aria-label="Recorded reading"
+            value={key}
+            onChange={(event) => setChosen(event.currentTarget.value)}
+          >
+            {entries.map(([id, reading]) => (
+              <option key={id} value={id}>
+                {reading.label}
+                {reading.samples === 0 ? " · Unavailable" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {signal.samples > 0 ? (
+        <>
+          <ObservationCurve
+            signal={signal}
+            label={signal.label}
+            units={units}
+          />
+          <dl className="session-reading-values">
+            {[
+              ["Start", signal.first],
+              ["End", signal.last],
+            ].map(([label, value]) => (
+              <div key={String(label)}>
+                <dt>{label}</dt>
+                <dd>{observed(value as number | null, signal.unit, units)}</dd>
+              </div>
+            ))}
+          </dl>
+          <details className="session-reading-details">
+            <summary>Reading details</summary>
+            <p>
+              Low {observed(signal.minimum, signal.unit, units)} · High{" "}
+              {observed(signal.maximum, signal.unit, units)}
+            </p>
+            <p>
+              {signal.samples} readings · {signal.coveredSeconds.toFixed(0)} s
+              covered
+              {signal.quality === "partial" ? " · Some readings missing" : ""}
+            </p>
+          </details>
+        </>
+      ) : (
+        <p>Unavailable</p>
+      )}
+    </section>
+  );
+}
 function EnergyComparison({
   first,
   second,
@@ -243,7 +317,7 @@ export function SessionAnalysis({
   activeId: string | null;
   units?: string;
 }) {
-  const [selected, setSelected] = useState("");
+  const [chosenSession, setSelected] = useState("");
   const [result, setResult] = useState<Analysis | null>(null);
   const [compareWith, setCompareWith] = useState("");
   const [comparison, setComparison] = useState<Analysis | null>(null);
@@ -251,6 +325,9 @@ export function SessionAnalysis({
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const available = sessions.filter((session) => session.id !== activeId);
+  const selected = available.some((session) => session.id === chosenSession)
+    ? chosenSession
+    : (available[0]?.id ?? "");
   const exists = available.some((session) => session.id === selected);
   const comparisonExists = available.some(
     (session) => session.id === compareWith && session.id !== selected,
@@ -328,7 +405,9 @@ export function SessionAnalysis({
               setCompareWith("");
             }}
           >
-            <option value="">Choose a recording</option>
+            <option value="" disabled>
+              No saved recordings
+            </option>
             {available.map((session) => (
               <option key={session.id} value={session.id}>
                 {new Date(session.modifiedAt * 1000).toLocaleString()} ·{" "}
@@ -375,12 +454,11 @@ export function SessionAnalysis({
       {result && (
         <div aria-live="polite">
           <p>
-            {observed(result.recording.durationSeconds, "s")} · Estimates · No
-            rollout
+            {observed(result.recording.durationSeconds, "s")} · Estimated
             {result.quality === "partial"
-              ? " · Partial"
+              ? " · Some readings missing"
               : result.quality === "invalid"
-                ? " · Invalid"
+                ? " · Unreadable"
                 : ""}
           </p>
           {result.quality === "invalid" && <p>{explain(result.reasons)}</p>}
@@ -389,59 +467,12 @@ export function SessionAnalysis({
               {comparison && (
                 <EnergyComparison first={result} second={comparison} />
               )}
-              <details className="session-conventions">
-                <summary>Timing and data quality</summary>
-                <p>
-                  Estimates with no rollout. Standing timing starts at the last
-                  observed zero. Speed samples must be at most{" "}
-                  {result.timing.maximumSpeedGapSeconds} s apart. Durations use
-                  recorded reading times. Timing accuracy has not been
-                  independently verified.
-                </p>
-                {result.reasons.length > 0 && <p>{explain(result.reasons)}</p>}
-                <p>
-                  Curves show sampled observations by elapsed seconds. Points
-                  are not joined across unobserved time.
-                </p>
-                <p>
-                  Compatibility with the recording's original setup has not been
-                  verified.{" "}
-                  {(result.battery.currentDirection ?? "unqualified") ===
-                  "unqualified"
-                    ? "Current direction is unverified. "
-                    : "Battery power is positive when used and negative when regained. "}
-                  These readings do not establish battery health, age, range or
-                  charging ETA.
-                </p>
-                <p>
-                  AC input energy covers{" "}
-                  {result.battery.charging.coveredSeconds.toFixed(1)} s of
-                  adjacent samples. It is not pack energy or DC fast-charge
-                  energy.
-                </p>
-              </details>
-              {result.performance.groups.map((group) => (
-                <section key={group.convention}>
-                  <h3>
-                    {group.convention.startsWith("standing")
-                      ? "Standing start"
-                      : "Rolling start"}
-                  </h3>
-                  <div className="session-measurements">
-                    {group.measurements.map((measurement) => (
-                      <MeasurementCard
-                        key={measurement.id}
-                        measurement={measurement}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
-              <h3>Energy and readings</h3>
+
+              <h3>Energy</h3>
               {result.battery.energy &&
                 result.battery.energy.quality !== "unavailable" && (
                   <>
-                    <dl className="session-observations">
+                    <dl className="session-observations session-energy">
                       {[
                         ["Energy used", result.battery.energy.drawnKwh, "kWh"],
                         [
@@ -475,39 +506,69 @@ export function SessionAnalysis({
                 {result.battery.charging.quality === "partial" &&
                   " · Some readings missing"}
               </p>
-              <dl className="session-observations">
-                {Object.entries(result.battery.signals).map(([key, signal]) => (
-                  <div key={key}>
-                    <dt>{signal.label}</dt>
-                    <dd>
-                      {signal.samples ? (
-                        <>
-                          {observed(signal.first, signal.unit, units)} →{" "}
-                          {observed(signal.last, signal.unit, units)}
-                          <details className="session-reading-details">
-                            <summary>Details</summary>
-                            <small>
-                              Observed{" "}
-                              {observed(signal.minimum, signal.unit, units)} to{" "}
-                              {observed(signal.maximum, signal.unit, units)} ·{" "}
-                              {signal.samples} samples · {signal.quality}
-                            </small>
-                          </details>
-                        </>
-                      ) : (
-                        "Unavailable"
-                      )}
-                    </dd>
-                    {signal.samples > 0 && (
-                      <ObservationCurve
-                        signal={signal}
-                        label={signal.label}
-                        units={units}
-                      />
-                    )}
-                  </div>
+              <h3>Readings</h3>
+              <RecordedReadings
+                signals={result.battery.signals}
+                units={units}
+              />
+              <details
+                className="session-conventions session-performance"
+                open={result.performance.groups.some((group) =>
+                  group.measurements.some(
+                    (measurement) => measurement.runs.length > 0,
+                  ),
+                )}
+              >
+                <summary>Performance</summary>
+                {result.performance.groups.map((group) => (
+                  <section key={group.convention}>
+                    <h3>
+                      {group.convention.startsWith("standing")
+                        ? "Standing start"
+                        : "Rolling start"}
+                    </h3>
+                    <div className="session-measurements">
+                      {group.measurements.map((measurement) => (
+                        <MeasurementCard
+                          key={measurement.id}
+                          measurement={measurement}
+                        />
+                      ))}
+                    </div>
+                  </section>
                 ))}
-              </dl>
+              </details>
+              <details className="session-conventions">
+                <summary>Timing and data quality</summary>
+                <p>
+                  Estimates with no rollout. Standing timing starts at the last
+                  observed zero. Speed samples must be at most{" "}
+                  {result.timing.maximumSpeedGapSeconds} s apart. Durations use
+                  recorded reading times. Timing accuracy has not been
+                  independently verified.
+                </p>
+                {result.reasons.length > 0 && <p>{explain(result.reasons)}</p>}
+                <p>
+                  Curves show sampled observations by elapsed seconds. Points
+                  are not joined across unobserved time.
+                </p>
+                <p>
+                  Compatibility with the recording's original setup has not been
+                  verified.{" "}
+                  {(result.battery.currentDirection ?? "unqualified") ===
+                  "unqualified"
+                    ? "Current direction is unverified. "
+                    : "Battery power is positive when used and negative when regained. "}
+                  These readings do not establish battery health, age, range or
+                  charging ETA.
+                </p>
+                <p>
+                  AC input energy covers{" "}
+                  {result.battery.charging.coveredSeconds.toFixed(1)} s of
+                  adjacent samples. It is not pack energy or DC fast-charge
+                  energy.
+                </p>
+              </details>
             </>
           )}
         </div>

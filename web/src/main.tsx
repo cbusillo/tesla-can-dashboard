@@ -623,61 +623,61 @@ function App() {
               </ion-item>
             </ion-list>
           )}
-          <ion-list-header>
-            <ion-label>Saved sessions</ion-label>
-          </ion-list-header>
-          <ion-list inset>
-            {data?.recording.sessions.map((s) => (
-              <ion-item key={s.id}>
-                <ion-label>
-                  <h2>{new Date(s.modifiedAt * 1000).toLocaleString()}</h2>
-                  <p>
-                    {(s.sizeBytes / 1024).toFixed(0)} KB
-                    {s.id === data.recording.activeId ? " · recording" : ""}
-                  </p>
-                </ion-label>
-                <ion-button
-                  fill="clear"
-                  href={"/api/recordings/" + s.id}
-                  download=""
-                >
-                  Export
-                </ion-button>
-                <ion-button
-                  fill="clear"
-                  disabled={busy || s.id === data.recording.activeId}
-                  onClick={() =>
-                    act("replay", "POST", { session_id: s.id, rate: 1 })
-                  }
-                >
-                  Replay
-                </ion-button>
-                <ion-button
-                  fill="clear"
-                  color="danger"
-                  disabled={busy || s.id === data.recording.activeId}
-                  onClick={() => {
-                    if (
-                      confirm(
-                        "Remove this saved session? Export it first if you want to keep it.",
-                      )
-                    )
-                      act("recordings/" + s.id, "DELETE");
-                  }}
-                >
-                  Remove
-                </ion-button>
-              </ion-item>
-            ))}
-          </ion-list>
-          {!data?.recording.sessions.length && (
-            <p class="ion-padding">No recordings</p>
-          )}
           <SessionAnalysis
             sessions={data?.recording.sessions || []}
             activeId={data?.recording.activeId || null}
             units={layout.units}
           />
+          <details class="session-library">
+            <summary>Saved recordings</summary>
+            <ion-list inset>
+              {data?.recording.sessions.map((s) => (
+                <ion-item key={s.id}>
+                  <ion-label>
+                    <h2>{new Date(s.modifiedAt * 1000).toLocaleString()}</h2>
+                    <p>
+                      {(s.sizeBytes / 1024).toFixed(0)} KB
+                      {s.id === data.recording.activeId ? " · recording" : ""}
+                    </p>
+                  </ion-label>
+                  <ion-button
+                    fill="clear"
+                    href={"/api/recordings/" + s.id}
+                    download=""
+                  >
+                    Export
+                  </ion-button>
+                  <ion-button
+                    fill="clear"
+                    disabled={busy || s.id === data.recording.activeId}
+                    onClick={() =>
+                      act("replay", "POST", { session_id: s.id, rate: 1 })
+                    }
+                  >
+                    Replay
+                  </ion-button>
+                  <ion-button
+                    fill="clear"
+                    color="danger"
+                    disabled={busy || s.id === data.recording.activeId}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "Remove this saved session? Export it first if you want to keep it.",
+                        )
+                      )
+                        act("recordings/" + s.id, "DELETE");
+                    }}
+                  >
+                    Remove
+                  </ion-button>
+                </ion-item>
+              ))}
+            </ion-list>
+            {!data?.recording.sessions.length && (
+              <p class="ion-padding">No recordings</p>
+            )}
+          </details>
         </Page>
         <Page name="settings" title="Settings" {...common}>
           <main class="settings-page">
