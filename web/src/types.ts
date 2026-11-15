@@ -215,7 +215,7 @@ export function sourceStatus(
   if (snapshot.replay?.source === "demonstration") return "Demo";
   if (snapshot.mode === "replay")
     return `Replay · ${snapshot.replay?.state || "playing"}`;
-  if (snapshot.connection.error) return "CAN unavailable";
+  if (snapshot.connection.error) return "Vehicle data unavailable";
   if (snapshot.connection.state === "connected") return "Live";
-  return lastUpdate || "Waiting for CAN";
+  return lastUpdate || "Waiting for vehicle";
 }

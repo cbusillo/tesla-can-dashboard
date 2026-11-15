@@ -7,8 +7,8 @@ charts, with open instruments and restrained day/night colors.
 The CAN receiver always remains receive-only.
 
 The first implementation includes selectable dials, numeric readings and
-recent history, editable dial ranges, 96 configurable cell groups with a
-voltage chart, day/night appearance, local session recording,
+recent history, editable dial ranges, 96 selectable cell groups with a
+voltage-deviation chart, day/night appearance, local session recording,
 export and replay. Missing, invalid, stale and disconnected data stay distinct
 from zero. The service reconnects when the interface returns. The browser
 reconnects automatically, marks held readings when the connection drops, and
@@ -18,14 +18,20 @@ Settings → Connection opens a public test page only when tapped. Use the
 browser's Back control to return. This supports parked connectivity observations;
 it does not configure an uplink or certify Wi-Fi/cellular coexistence.
 
-Overview shows the first two selected instruments as open dials and the rest
-as readings, with selectable recent history. Cells provides chart selection,
-a group map and large previous/next controls. Charging shows available pack
-readings and current history. Sessions and Settings remain in the bottom
-navigation. Existing saved instruments, ranges, units and appearance are
-preserved. Overview opens with its instruments ready to read; Edit reveals
-instrument choices, display style, history selection and dial limits. Done or
-leaving Overview hides those controls. Editing is not restored on reload.
+Instruments shows the first two selected readings as open dials and the rest
+as numbers, with selectable recent history. Edit reveals instrument choices,
+display style, history selection and dial limits. Done or leaving Instruments
+hides those controls. Editing is not restored on reload. Existing saved
+instruments, ranges, units and appearance are preserved.
+
+Battery combines charge, pack energy, power, voltage, current and temperature
+with recorded history. Choose Charge, Full pack, Cell spread or Temperature
+and a day, week, month or year. Charging controls stay behind a disclosure.
+Cells shows each fresh group's deviation from the fresh-group average, with
+lowest/highest shortcuts, a scrubber and large previous/next controls. The
+numbered group picker stays behind Choose group. Stale or invalid groups do
+not contribute to the average or deviation chart. Sessions and Settings
+remain in the bottom navigation.
 Charging power and charge limit remain unavailable until decoded;
 the app does not estimate range, charging ETA or current direction.
 
@@ -89,7 +95,7 @@ and per-reading details stay collapsed until requested. Recording chunks are
 compared as saved; the table does not claim to combine them into whole trips.
 Operator profile identity, charging semantics and precision still require runtime qualification.
 
-Overview's Edit list also offers Battery output limit and Regen limit when the
+Instruments' Edit list also offers Battery output limit and Regen limit when the
 operator profile provides them. These are the battery's reported limits for its
 current operating mode. They are not measured motor power or a prediction of
 acceleration; parked limits can differ from driving limits. Missing or reserved
@@ -100,8 +106,8 @@ Optional cabin controls use a separate private Bluetooth helper and an enrolled
 vehicle key. CAN remains receive-only. Both cabin setpoints can be decoded from
 a compatible operator profile; LO/HI are not presented as numeric temperatures.
 The temperature control sets both sides together, in half-degree steps from
-16–27°C. Charging includes a 50–100% charge-limit slider; dragging it only
-prepares a value, and Set sends one change. Leaving Charging clears an unsent
+16–27°C. Battery → Charging includes a 50–100% charge-limit slider; dragging it only
+prepares a value, and Set sends one change. Leaving Battery or closing Charging clears an unsent
 value. The existing browser connection works for both controls.
 Connect shows a short approval number instead of asking for the Pi's private
 access code. An operator matches that number with the browser's owner and
@@ -117,7 +123,7 @@ Controls remain disabled unless explicitly configured; see [installation](deploy
 Gear uses P, R, N and D in readings and step history. Its internal numeric
 codes and numeric dial-range controls are not presented as instruments.
 
-Charging → History shows recorded pack energy and cell balance. Live battery
+Battery shows recorded pack energy and cell balance. Live battery
 observations are saved every five minutes independently of raw CAN recording
 or browser activity, after a 30-second wake settling period, including fresh
 fields and available cell-group voltages rounded to 0.1 mV.

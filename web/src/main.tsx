@@ -1,5 +1,6 @@
 import { render } from "preact";
-import { BatteryHistory } from "./battery-history";
+import { Battery } from "./battery";
+import { Cells } from "./cells";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { initialize } from "@ionic/core/components";
 import { addIcons } from "ionicons";
@@ -11,7 +12,6 @@ import {
   documentTextOutline,
   speedometerOutline,
   optionsOutline,
-  flashOutline,
 } from "ionicons/icons";
 import "@ionic/core/css/core.css";
 import "@ionic/core/css/normalize.css";
@@ -26,9 +26,6 @@ const Dial = lazy(() =>
 );
 const History = lazy(() =>
   import("./charts").then((module) => ({ default: module.History })),
-);
-const CellChart = lazy(() =>
-  import("./charts").then((module) => ({ default: module.CellChart })),
 );
 import {
   api,
@@ -47,9 +44,9 @@ import {
 import { Metric, Page } from "./dashboard";
 import { SessionAnalysis } from "./session-analysis";
 import { Climate } from "./climate";
-import { ChargeLimit } from "./charge-limit";
 import { useVehicleControls } from "./vehicle-controls";
 import "./style.css";
+import "./battery-cells.css";
 initialize({ mode: "ios", animated: false });
 addIcons({
   batteryHalfOutline,
@@ -59,7 +56,6 @@ addIcons({
   documentTextOutline,
   speedometerOutline,
   optionsOutline,
-  flashOutline,
 });
 defineComponents();
 
@@ -206,9 +202,7 @@ function App() {
     save,
   } = useDashboard();
   const [tab, setTab] = useState("instruments"),
-    [batteryHistory, setBatteryHistory] = useState(false),
     [editing, setEditing] = useState(false),
-    [selectedCell, setSelectedCell] = useState<number | null>(1),
     [editKey, setEditKey] = useState<string | null>(null),
     [rangeMin, setRangeMin] = useState(""),
     [rangeMax, setRangeMax] = useState(""),
@@ -239,14 +233,7 @@ function App() {
     demo = data?.replay?.source === "demonstration";
   const status = sourceStatus(data, offline);
   const theme = () => save({ ...layout, theme: dark ? "day" : "night" });
-  const signals = data?.signals || {},
-    cells = data?.cellGroups || [],
-    fresh = cells.filter((c) => c.quality === "fresh" && c.value !== null),
-    cell = cells.find((c) => c.index === selectedCell);
-  const spread =
-    data?.cellSpreadMv === null || data?.cellSpreadMv === undefined
-      ? "—"
-      : data.cellSpreadMv.toFixed(1) + " mV";
+  const signals = data?.signals || {};
   function openRange(key: string) {
     const definition = catalog.find((c) => c.key === key);
     if (!definition) return;
@@ -349,7 +336,9 @@ function App() {
             />
           </Suspense>
         ) : (
-          <div class="reading">{display(reading, layout.units, undefined, definition?.choices)}</div>
+          <div class="reading">
+            {display(reading, layout.units, undefined, definition?.choices)}
+          </div>
         )}
         <div class="quality">{readingStatus(reading)}</div>
         {layout.presentation === "history" && (
@@ -368,7 +357,6 @@ function App() {
     );
   }
   const charge = signals.displayedChargePercent;
-  const showCharge = charge?.quality === "fresh" && charge.value !== null;
   return (
     <ion-app>
       <span id="chart-text" hidden />
@@ -394,7 +382,7 @@ function App() {
       >
         <Page
           name="instruments"
-          title="Overview"
+          title="Instruments"
           {...common}
           toolbar={
             <ion-button
@@ -410,17 +398,18 @@ function App() {
           }
         >
           <main class="overview">
-            <Climate data={data} units={layout.units} controls={vehicleControls} />
             {!catalog.length && <p role="status">Loading instruments…</p>}
             <div class="charge-context">
-              <div class="charge-level">
-                <ion-icon name="battery-half-outline" aria-hidden="true" />
-                <span>Charge</span>
-                <strong>{display(charge, layout.units)}</strong>
-                {readingStatus(charge) && (
-                  <small>{readingStatus(charge)}</small>
-                )}
-              </div>
+              {!displayedInstruments.includes("displayedChargePercent") && (
+                <div class="charge-level">
+                  <ion-icon name="battery-half-outline" aria-hidden="true" />
+                  <span>Charge</span>
+                  <strong>{display(charge, layout.units)}</strong>
+                  {readingStatus(charge) && (
+                    <small>{readingStatus(charge)}</small>
+                  )}
+                </div>
+              )}
               {editing && (
                 <div class="instrument-tools">
                   {layout.instruments.length > 0 && (
@@ -479,18 +468,19 @@ function App() {
                           units={layout.units}
                           choices={catalog.find((d) => d.key === key)?.choices}
                         >
-                          {editing && !catalog.find((d) => d.key === key)?.choices && (
-                            <ion-button
-                              fill="clear"
-                              onClick={() => openRange(key)}
-                              aria-label={`Configure ${instrumentLabel(key)}`}
-                            >
-                              <ion-icon
-                                name="options-outline"
-                                slot="icon-only"
-                              />
-                            </ion-button>
-                          )}
+                          {editing &&
+                            !catalog.find((d) => d.key === key)?.choices && (
+                              <ion-button
+                                fill="clear"
+                                onClick={() => openRange(key)}
+                                aria-label={`Configure ${instrumentLabel(key)}`}
+                              >
+                                <ion-icon
+                                  name="options-outline"
+                                  slot="icon-only"
+                                />
+                              </ion-button>
+                            )}
                         </Metric>
                       ))}
                     </div>
@@ -535,7 +525,10 @@ function App() {
                       >
                         {catalog.map((d) => (
                           <option value={d.key} key={d.key}>
-                            {d.label}{d.unit ? ` (${displayUnit(d.unit, layout.units)})` : ""}
+                            {d.label}
+                            {d.unit
+                              ? ` (${displayUnit(d.unit, layout.units)})`
+                              : ""}
                           </option>
                         ))}
                       </select>
@@ -551,258 +544,30 @@ function App() {
                       label={instrumentLabel(historyKey)}
                       staleAfter={historyDefinition?.stale_after}
                       choices={historyDefinition?.choices}
-                      height={80}
-                    />
-                  </Suspense>
-                )}
-              </section>
-            )}
-          </main>
-        </Page>
-        <Page name="cells" title="Battery / Cells" {...common}>
-          <main class="cells-page">
-            <div class="screen-heading">
-              <div>
-                <h2>Cell voltage</h2>
-                <p>
-                  {data?.freshCellCount ?? 0} / {cells.length || "—"} groups
-                  fresh
-                </p>
-              </div>
-              <div class="cells-summary">
-                <div>
-                  <small>Spread · all groups</small>
-                  <strong>{spread}</strong>
-                </div>
-                <div>
-                  <small>Lowest / highest fresh</small>
-                  <strong>
-                    {fresh.length
-                      ? `${Math.min(...fresh.map((c) => c.value!)).toFixed(3)} / ${Math.max(...fresh.map((c) => c.value!)).toFixed(3)} V`
-                      : "—"}
-                  </strong>
-                </div>
-              </div>
-            </div>
-            {tab === "cells" && (
-              <Suspense fallback={<p>Loading cell chart…</p>}>
-                <CellChart
-                  cells={cells}
-                  selected={selectedCell}
-                  onSelect={setSelectedCell}
-                  dark={dark}
-                />
-              </Suspense>
-            )}
-            <div class="cell-workbench">
-              <div
-                class="cell-grid"
-                role="group"
-                aria-label="Select cell group"
-              >
-                {cells.map((c) => (
-                  <button
-                    key={c.index}
-                    class={`${c.index === selectedCell ? "selected " : ""}${c.quality}`}
-                    aria-label={`Group ${c.index}: ${display(c, "metric", 4)}, ${readingStatus(c) || "Fresh"}`}
-                    title={`Group ${c.index}: ${display(c, "metric", 4)}, ${readingStatus(c) || "Fresh"}`}
-                    aria-pressed={c.index === selectedCell}
-                    onClick={() => setSelectedCell(c.index)}
-                  >
-                    {String(c.index).padStart(2, "0")}
-                  </button>
-                ))}
-              </div>
-              <aside
-                class={`cell-detail ${cell?.quality || "unavailable"}`}
-                aria-live="polite"
-              >
-                <label class="group-choice">
-                  Group{" "}
-                  <select
-                    aria-label="Selected cell group"
-                    value={selectedCell || ""}
-                    onChange={(e) =>
-                      setSelectedCell(Number(e.currentTarget.value))
-                    }
-                  >
-                    {cells.map((c) => (
-                      <option value={c.index} key={c.index}>
-                        {c.index}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div class="selected-voltage">{display(cell, "metric", 4)}</div>
-                <p class="quality">{readingStatus(cell) || "Fresh"}</p>
-                <div class="detail-row">
-                  <span>Observed low</span>
-                  <strong>
-                    {cell?.minimum == null
-                      ? "—"
-                      : cell.minimum.toFixed(4) + " V"}
-                  </strong>
-                </div>
-                <div class="detail-row">
-                  <span>Observed high</span>
-                  <strong>
-                    {cell?.maximum == null
-                      ? "—"
-                      : cell.maximum.toFixed(4) + " V"}
-                  </strong>
-                </div>
-                <div class="stepper">
-                  <button
-                    aria-label="Previous cell group"
-                    disabled={!cell || cells[0]?.index === cell.index}
-                    onClick={() =>
-                      setSelectedCell(
-                        cells[
-                          cells.findIndex((c) => c.index === selectedCell) - 1
-                        ]?.index ?? null,
-                      )
-                    }
-                  >
-                    ‹
-                  </button>
-                  <button
-                    aria-label="Next cell group"
-                    disabled={
-                      !cell || cells[cells.length - 1]?.index === cell.index
-                    }
-                    onClick={() =>
-                      setSelectedCell(
-                        cells[
-                          cells.findIndex((c) => c.index === selectedCell) + 1
-                        ]?.index ?? null,
-                      )
-                    }
-                  >
-                    ›
-                  </button>
-                </div>
-              </aside>
-            </div>
-          </main>
-        </Page>
-        <Page name="charging" title="Charging" {...common}>
-          <main class="charging-page">
-            <ion-segment
-              value={batteryHistory ? "history" : "now"}
-              aria-label="Battery view"
-              onionChange={(event: CustomEvent) =>
-                setBatteryHistory(event.detail.value === "history")
-              }
-            >
-              <ion-segment-button value="now">
-                <ion-label>Now</ion-label>
-              </ion-segment-button>
-              <ion-segment-button value="history">
-                <ion-label>History</ion-label>
-              </ion-segment-button>
-            </ion-segment>
-            <div hidden={batteryHistory}>
-              <div class="screen-heading">
-                <div>
-                  <h2>Battery charge</h2>
-                </div>
-                <div
-                  class={`charging-level ${charge?.quality || "unavailable"}`}
-                >
-                  <strong>{display(charge, layout.units)}</strong>
-                  <small>{readingStatus(charge) || "State of charge"}</small>
-                </div>
-              </div>
-              <div
-                class={`charge-progress ${showCharge ? "" : "unknown"}`}
-                role="img"
-                aria-label={
-                  showCharge
-                    ? `Charge ${charge.value}%`
-                    : "Charge progress unavailable"
-                }
-              >
-                {showCharge && (
-                  <span
-                    style={{
-                      width: `${Math.max(0, Math.min(100, charge.value!))}%`,
-                    }}
-                  />
-                )}
-              </div>
-              <div class="metric-strip charging-metrics">
-                <Metric
-                  label="Pack voltage"
-                  reading={signals.voltageV}
-                  units={layout.units}
-                />
-                <Metric
-                  label="Pack current"
-                  reading={signals.currentA}
-                  units={layout.units}
-                />
-                <Metric
-                  label="Remaining energy"
-                  reading={signals.remainingEnergyKwh}
-                  units={layout.units}
-                />
-                <Metric
-                  label="Full pack energy"
-                  reading={signals.fullPackEnergyKwh}
-                  units={layout.units}
-                />
-              </div>
-              <section class="history-panel">
-                <div class="section-heading">
-                  <h2>Pack current history</h2>
-                  <small>
-                    {(data?.currentDirection ?? "unqualified") === "unqualified"
-                      ? "A · direction unverified"
-                      : "A"}
-                  </small>
-                </div>
-                {tab === "charging" && !batteryHistory && (
-                  <Suspense fallback={<p>Loading history…</p>}>
-                    <History
-                      reading={signals.currentA}
-                      units={layout.units}
-                      dark={dark}
-                      label="Pack current"
-                      staleAfter={
-                        catalog.find((d) => d.key === "currentA")?.stale_after
-                      }
                       height={130}
                     />
                   </Suspense>
                 )}
               </section>
-              <div class="metric-strip charging-metrics">
-                <Metric
-                  label="Lowest temperature"
-                  reading={signals.minimumTemperatureC}
-                  units={layout.units}
-                />
-                <Metric
-                  label="Highest temperature"
-                  reading={signals.maximumTemperatureC}
-                  units={layout.units}
-                />
-                <Metric
-                  label="Charging power"
-                  reading={signals.chargingPowerKw}
-                  units={layout.units}
-                />
-              </div>
-              <ChargeLimit data={data} controls={vehicleControls} active={tab === "charging" && !batteryHistory} />
-            </div>
-            <div hidden={!batteryHistory}>
-              <BatteryHistory
-                active={tab === "charging" && batteryHistory}
-                units={layout.units}
-                dark={dark}
-              />
-            </div>
+            )}
+            <Climate
+              data={data}
+              units={layout.units}
+              controls={vehicleControls}
+            />
           </main>
+        </Page>
+        <Page name="cells" title="Cells" {...common}>
+          <Cells data={data} active={tab === "cells"} dark={dark} />
+        </Page>
+        <Page name="charging" title="Battery" {...common}>
+          <Battery
+            data={data}
+            units={layout.units}
+            dark={dark}
+            active={tab === "charging"}
+            controls={vehicleControls}
+          />
         </Page>
         <Page name="sessions" title="Sessions" {...common}>
           <ion-list-header>
@@ -949,7 +714,12 @@ function App() {
               <ion-label>Connection</ion-label>
             </ion-list-header>
             <ion-list>
-              <ion-item href="https://checkip.amazonaws.com/" target="_self" rel="noreferrer" detail>
+              <ion-item
+                href="https://checkip.amazonaws.com/"
+                target="_self"
+                rel="noreferrer"
+                detail
+              >
                 <ion-label>Open internet test page</ion-label>
               </ion-item>
             </ion-list>
@@ -957,9 +727,9 @@ function App() {
         </Page>
         <ion-tab-bar slot="bottom">
           {[
-            ["instruments", "Overview", "speedometer-outline"],
+            ["instruments", "Instruments", "speedometer-outline"],
+            ["charging", "Battery", "battery-half-outline"],
             ["cells", "Cells", "grid-outline"],
-            ["charging", "Charging", "flash-outline"],
             ["sessions", "Sessions", "document-text-outline"],
             ["settings", "Settings", "settings-outline"],
           ].map(([key, label, icon]) => (
