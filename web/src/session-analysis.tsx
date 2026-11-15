@@ -149,6 +149,7 @@ function ObservationCurve({
   const style = getComputedStyle(document.documentElement);
   const muted = style.getPropertyValue("--muted").trim() || style.color;
   const accent = style.getPropertyValue("--accent").trim() || style.color;
+  const line = style.getPropertyValue("--line").trim() || muted;
   return (
     <Suspense fallback={<p>Loading chart…</p>}>
       <Chart
@@ -156,13 +157,29 @@ function ObservationCurve({
         height={160}
         option={{
           grid: { left: 50, right: 16, top: 20, bottom: 35 },
-          tooltip: { trigger: "item", renderMode: "richText", confine: true },
-          xAxis: { type: "value", name: "s", axisLabel: { color: muted } },
+          tooltip: {
+            trigger: "item",
+            renderMode: "richText",
+            confine: true,
+            backgroundColor: style.getPropertyValue("--surface").trim(),
+            borderColor: line,
+            textStyle: { color: style.color },
+          },
+          xAxis: {
+            type: "value",
+            name: "s",
+            nameTextStyle: { color: muted },
+            axisLabel: { color: muted },
+            axisLine: { lineStyle: { color: line } },
+            splitLine: { show: false },
+          },
           yAxis: {
             type: "value",
             scale: true,
             name: displayUnit(signal.unit, units),
+            nameTextStyle: { color: muted },
             axisLabel: { color: muted },
+            splitLine: { lineStyle: { color: line } },
           },
           series: [
             {
@@ -317,7 +334,7 @@ export function SessionAnalysis({
   activeId: string | null;
   units?: string;
 }) {
-  const [chosenSession, setSelected] = useState("");
+  const [selected, setSelected] = useState("");
   const [result, setResult] = useState<Analysis | null>(null);
   const [compareWith, setCompareWith] = useState("");
   const [comparison, setComparison] = useState<Analysis | null>(null);
@@ -325,9 +342,10 @@ export function SessionAnalysis({
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const available = sessions.filter((session) => session.id !== activeId);
-  const selected = available.some((session) => session.id === chosenSession)
-    ? chosenSession
-    : (available[0]?.id ?? "");
+  const newest = available[0]?.id ?? "";
+  useEffect(() => {
+    if (!selected && newest) setSelected(newest);
+  }, [selected, newest]);
   const exists = available.some((session) => session.id === selected);
   const comparisonExists = available.some(
     (session) => session.id === compareWith && session.id !== selected,
@@ -406,7 +424,7 @@ export function SessionAnalysis({
             }}
           >
             <option value="" disabled>
-              No saved recordings
+              {available.length ? "Choose a recording" : "No saved recordings"}
             </option>
             {available.map((session) => (
               <option key={session.id} value={session.id}>
