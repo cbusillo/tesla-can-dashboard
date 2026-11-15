@@ -1,0 +1,330 @@
+.reading-unit {
+  font-size: 0.56em;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.battery-charge {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 0;
+}
+.battery-charge > div:first-child > span,
+.cell-summary span,
+.cell-inspector > div > span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+.battery-charge > div:first-child > strong {
+  display: block;
+  font-size: 64px;
+  font-weight: 350;
+  line-height: 68px;
+  letter-spacing: -2px;
+  font-variant-numeric: tabular-nums;
+}
+.battery-energy > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 20px;
+  padding: 3px 0;
+}
+.battery-energy span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.battery-energy strong {
+  font-size: 20px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.battery-charge.stale strong,
+.battery-charge.invalid strong,
+.battery-charge.unavailable strong,
+.battery-energy .stale strong,
+.battery-energy .invalid strong,
+.battery-energy .unavailable strong,
+.cell-inspector.stale strong,
+.cell-inspector.invalid strong,
+.cell-inspector.unavailable strong {
+  color: var(--muted);
+}
+.battery-level {
+  position: relative;
+  padding: 12px 0 14px;
+}
+.battery-level .charge-progress {
+  height: 12px;
+  border-radius: 2px;
+  margin: 0;
+}
+.charge-limit-tick {
+  position: absolute;
+  top: 8px;
+  height: 21px;
+  border-left: 2px solid var(--ink);
+}
+.battery-level-labels {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.battery-metrics {
+  padding: 9px 0;
+}
+.battery-metrics .metric-value {
+  font-size: 26px;
+  line-height: 34px;
+}
+.battery-metrics .temperature-range {
+  font-size: 24px;
+}
+.battery-trend-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+}
+.battery-trend-controls ion-segment {
+  width: auto;
+  margin: 0;
+  max-width: none;
+}
+.battery-trend-controls ion-segment:first-child {
+  flex: 1;
+}
+.battery-trend-controls ion-segment-button {
+  min-height: 44px;
+  --padding-start: 10px;
+  --padding-end: 10px;
+  font-size: 13px;
+}
+.battery-trend .section-heading {
+  min-height: 28px;
+}
+.battery-controls {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.battery-controls > summary,
+.cell-picker > summary {
+  min-height: 44px;
+  padding: 12px 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+}
+.battery-controls > .metric {
+  border: 0;
+  padding: 8px 0;
+}
+.cell-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 80px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cell-summary > * {
+  text-align: left;
+  min-width: 0;
+  padding: 0 16px;
+  border-left: 1px solid var(--line);
+}
+.cell-summary > :first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.cell-summary > :last-child {
+  padding-right: 0;
+}
+.cell-summary strong {
+  display: block;
+  font-size: 26px;
+  line-height: 34px;
+  font-weight: 400;
+  letter-spacing: -0.4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cell-summary strong small {
+  font-size: 0.56em;
+}
+.cell-extreme {
+  min-height: 48px;
+}
+.cell-extreme > small {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+}
+.cell-scale-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 28px;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.cell-scrubber {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.cell-inspector {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) minmax(0, 0.85fr) minmax(
+      180px,
+      1.45fr
+    );
+  gap: 16px;
+  align-items: center;
+  min-height: 72px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cell-inspector > div {
+  min-width: 0;
+}
+.cell-inspector > div:not(:first-child) {
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+}
+.cell-inspector strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: -0.5px;
+  line-height: 34px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cell-inspector strong small {
+  font-size: 0.56em;
+}
+.cell-inspector .cell-observed strong {
+  font-size: 20px;
+  letter-spacing: -0.4px;
+}
+.cell-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.cell-navigation button {
+  min-width: 48px;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 7px;
+  color: var(--accent);
+  font-size: 28px;
+}
+.cell-navigation label {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.cell-navigation select {
+  display: block;
+  min-height: 44px;
+  min-width: 56px;
+  border: 0;
+  background: transparent;
+  font-size: 22px;
+  color: var(--ink);
+}
+.cell-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
+}
+.cell-grid button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 13px;
+  border-radius: 4px;
+  background: var(--faint);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.cell-grid button.selected {
+  background: var(--accent);
+  color: var(--base);
+  font-weight: 550;
+}
+@media (max-width: 600px) {
+  .battery-charge {
+    gap: 12px;
+  }
+  .battery-charge > div:first-child > strong {
+    font-size: 52px;
+    line-height: 58px;
+  }
+  .battery-energy > div {
+    gap: 8px;
+  }
+  .battery-energy strong {
+    font-size: 17px;
+  }
+  .battery-energy span {
+    font-size: 12px;
+  }
+  .battery-trend-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .battery-trend-controls ion-segment {
+    width: 100%;
+  }
+  .battery-metrics .metric-value {
+    font-size: 24px;
+  }
+  .battery-metrics .temperature-range {
+    font-size: 22px;
+  }
+  .cell-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 0;
+  }
+  .cell-summary > :nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .cell-summary > :nth-child(even) {
+    padding-right: 0;
+  }
+  .cell-inspector {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .cell-inspector .cell-navigation {
+    grid-column: 1 / -1;
+    max-width: 220px;
+  }
+  .cell-inspector > div:nth-child(2),
+  .cell-inspector > div:last-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .cell-inspector .cell-observed {
+    grid-column: 1 / -1;
+  }
+  .cell-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}

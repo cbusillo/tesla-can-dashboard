@@ -1,5 +1,39 @@
 import type { ComponentChildren } from "preact";
-import { display, readingStatus, type Reading, type Definition } from "./types";
+import {
+  convert,
+  displayUnit,
+  usableReading,
+  readingStatus,
+  type Reading,
+  type Definition,
+} from "./types";
+
+export function Value({
+  reading,
+  units,
+  decimals,
+  choices,
+  showUnit = true,
+}: {
+  reading?: Reading;
+  units: string;
+  decimals?: number;
+  choices?: Definition["choices"];
+  showUnit?: boolean;
+}) {
+  if (!usableReading(reading)) return <>—</>;
+  if (choices) return <>{choices[String(reading.value)] ?? "—"}</>;
+  return (
+    <>
+      {convert(reading.value, reading.unit, units).toFixed(
+        decimals ?? (reading.unit === "V" ? 2 : 1),
+      )}
+      {showUnit && (
+        <small class="reading-unit"> {displayUnit(reading.unit, units)}</small>
+      )}
+    </>
+  );
+}
 
 export function Metric({
   label,
@@ -20,7 +54,9 @@ export function Metric({
         {label}
         {children}
       </div>
-      <div class="metric-value">{display(reading, units, undefined, choices)}</div>
+      <div class="metric-value">
+        <Value reading={reading} units={units} choices={choices} />
+      </div>
       <div class="quality">{readingStatus(reading)}</div>
     </div>
   );
@@ -45,9 +81,6 @@ export function Page({
     <ion-tab tab={name}>
       <ion-header class="page-header">
         <div class="identity">
-          <span class="mark" aria-hidden="true">
-            ╱╱
-          </span>
           <h1>{title}</h1>
         </div>
         <div class="header-actions">

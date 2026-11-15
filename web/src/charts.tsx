@@ -15,6 +15,7 @@ import {
   type TooltipComponentOption,
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
+import { summarizeCells } from "./cell-summary";
 import {
   convert,
   display,
@@ -145,17 +146,24 @@ export function Dial({
           lineStyle: { width: 4, color: [[1, color("chart-track")]] },
         },
         progress: {
-          show: true,
+          show: minimum >= 0,
           width: 4,
           itemStyle: {
             color: primary,
             opacity: usable && reading?.quality === "fresh" ? 1 : 0,
           },
         },
-        pointer: { show: false },
+        pointer: {
+          show: usable && reading?.quality === "fresh",
+          length: "12%",
+          width: 3,
+          icon: "rect",
+          offsetCenter: [0, "-86%"],
+          itemStyle: { color: color("chart-text") },
+        },
         axisTick: {
           show: true,
-          splitNumber: 4,
+          splitNumber: 1,
           length: 3,
           lineStyle: { color: color("chart-muted"), width: 1 },
         },
@@ -166,16 +174,21 @@ export function Dial({
         axisLabel: {
           distance: -18,
           color: color("chart-muted"),
-          fontSize: 10,
-          formatter: (v) => Number(v.toFixed(1)).toString(),
+          fontSize: 12,
+          formatter: (v) =>
+            Math.abs(v - minimum) < 0.00001 ||
+            Math.abs(v - maximum) < 0.00001 ||
+            Math.abs(v) < 0.00001
+              ? Number(v.toFixed(1)).toString()
+              : "",
         },
         anchor: { show: false },
         title: { show: false },
         detail: {
           valueAnimation: false,
           offsetCenter: [0, "-2%"],
-          fontSize: 48,
-          fontWeight: 350,
+          fontSize: 54,
+          fontWeight: 400,
           color: color(
             reading?.quality === "fresh" ? "chart-text" : "chart-muted",
           ),
@@ -198,7 +211,7 @@ export function Dial({
     <div data-theme={dark ? "night" : "day"}>
       <Chart
         option={option}
-        height={190}
+        height={210}
         label={`${label}: ${display(reading, units)}${readingStatus(reading) ? ", " + readingStatus(reading) : ""}`}
       />
       <div class="dial-unit">
@@ -219,6 +232,7 @@ export function History({
   height = 160,
   samplesOnly = false,
   choices,
+  range,
 }: {
   reading: Reading | undefined;
   units: string;
@@ -228,6 +242,7 @@ export function History({
   height?: number;
   samplesOnly?: boolean;
   choices?: Record<string, string> | null;
+  range?: DialRange;
 }) {
   const points = (reading?.history || []).filter(
     (point) =>
@@ -254,8 +269,14 @@ export function History({
   const categories = choices ? Object.keys(choices).map(Number) : [];
   const padding = Math.max(
     (highest - lowest) * 0.1,
-    Math.abs(highest) * 0.001,
-    0.01,
+    Math.abs(highest) * 0.01,
+    reading?.unit === "kW"
+      ? 5
+      : reading?.unit === "A"
+        ? 1
+        : reading?.unit === "°C"
+          ? 1
+          : 0.1,
   );
   const option: Option = {
     grid: { left: 48, right: 16, top: 12, bottom: 28 },
@@ -263,7 +284,12 @@ export function History({
       trigger: "axis",
       renderMode: "richText",
       confine: true,
-      valueFormatter: (v) => typeof v === "number" ? (choices ? choices[String(v)] ?? "—" : v.toFixed(2)) : "—",
+      valueFormatter: (v) =>
+        typeof v === "number"
+          ? choices
+            ? (choices[String(v)] ?? "—")
+            : v.toFixed(2)
+          : "—",
     },
     xAxis: {
       type: "time",
@@ -272,20 +298,31 @@ export function History({
         : undefined,
       max: points.length ? points[points.length - 1][0] * 1000 : undefined,
       splitNumber: 3,
-      axisLabel: { color: color("chart-muted"), fontSize: 10 },
+      axisLabel: { color: color("chart-muted"), fontSize: 12 },
       axisLine: { lineStyle: { color: color("chart-track") } },
       splitLine: { show: false },
     },
     yAxis: {
       type: "value",
       splitNumber: 2,
-      min: categories.length ? Math.min(...categories) : lowest - padding,
-      max: categories.length ? Math.max(...categories) : highest + padding,
+      min: range
+        ? convert(range.minimum, reading?.unit || "", units)
+        : categories.length
+          ? Math.min(...categories)
+          : lowest - padding,
+      max: range
+        ? convert(range.maximum, reading?.unit || "", units)
+        : categories.length
+          ? Math.max(...categories)
+          : highest + padding,
       interval: categories.length ? 1 : undefined,
       axisLabel: {
         color: color("chart-muted"),
-        fontSize: 10,
-        formatter: (v: number) => choices ? choices[String(v)] ?? "" : Number(v.toFixed(2)).toString(),
+        fontSize: 12,
+        formatter: (v: number) =>
+          choices
+            ? (choices[String(v)] ?? "")
+            : Number(v.toFixed(2)).toString(),
       },
       splitLine: { lineStyle: { color: color("chart-track") } },
     },
@@ -337,41 +374,64 @@ export function CellChart({
   onSelect: (index: number) => void;
   dark: boolean;
 }) {
-  const fresh = cells.filter((c) => c.quality === "fresh" && c.value !== null),
-    min = fresh.length ? Math.min(...fresh.map((c) => c.value!)) : 0,
-    max = fresh.length ? Math.max(...fresh.map((c) => c.value!)) : 0;
+  const { fresh, average } = summarizeCells(cells);
+  const deviations = cells.map((cell) =>
+    cell.quality === "fresh" &&
+    cell.value !== null &&
+    Number.isFinite(cell.value) &&
+    average !== null
+      ? (cell.value - average) * 1000
+      : null,
+  );
+  const extent = Math.max(
+    5,
+    ...deviations.map((value) =>
+      value === null ? 0 : Math.ceil(Math.abs(value) / 5) * 5,
+    ),
+  );
   const option: Option = {
-    grid: { left: 55, right: 12, top: 10, bottom: 30 },
+    grid: { left: 45, right: 12, top: 14, bottom: 32 },
     tooltip: {
       trigger: "item",
       renderMode: "richText",
       confine: true,
       valueFormatter: (v) =>
-        typeof v === "number" ? v.toFixed(4) + " V" : "Unavailable",
+        typeof v === "number"
+          ? (v > 0 ? "+" : "") + v.toFixed(1) + " mV"
+          : "Unavailable",
     },
     xAxis: {
       type: "category",
       data: cells.map((c) => String(c.index)),
-      axisLabel: { color: color("chart-muted"), fontSize: 10 },
+      axisLabel: {
+        color: color("chart-muted"),
+        fontSize: 12,
+        interval: (index: number) =>
+          index === 0 ||
+          index === cells.length - 1 ||
+          (index + 1) % Math.max(1, Math.round(cells.length / 8)) === 0,
+      },
       axisLine: { lineStyle: { color: color("chart-track") } },
     },
     yAxis: {
       type: "value",
-      min: Math.floor((min - 0.001) * 1000) / 1000,
-      max: Math.ceil((max + 0.001) * 1000) / 1000,
+      min: -extent,
+      max: extent,
+      splitNumber: 2,
       axisLabel: {
         color: color("chart-muted"),
-        fontSize: 10,
-        formatter: (v) => v.toFixed(3),
+        fontSize: 12,
+        formatter: (v) => (v > 0 ? "+" : "") + Number(v.toFixed(1)).toString(),
       },
       splitLine: { lineStyle: { color: color("chart-track") } },
     },
     series: [
       {
         type: "bar",
+        barMinHeight: 1,
         barCategoryGap: "15%",
-        data: cells.map((c) => ({
-          value: c.quality === "fresh" ? c.value : null,
+        data: cells.map((c, index) => ({
+          value: deviations[index],
           itemStyle: {
             color: color(
               c.index === selected ? "chart-accent" : "chart-primary",
@@ -386,15 +446,15 @@ export function CellChart({
       {fresh.length ? (
         <Chart
           option={option}
-          height={145}
-          label="Cell group voltages by group number"
+          height={190}
+          label="Cell group voltage differences from the average, in millivolts"
           onPointClick={(index) => {
             if (cells[index]) onSelect(cells[index].index);
           }}
         />
       ) : (
-        <div class="history-empty" style={{ height: 145 }}>
-          No fresh cell samples
+        <div class="history-empty" style={{ height: 190 }}>
+          No current cell readings
         </div>
       )}
     </div>
