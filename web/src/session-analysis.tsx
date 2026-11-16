@@ -3,7 +3,13 @@ import { lazy, Suspense } from "preact/compat";
 const Chart = lazy(() =>
   import("./charts").then((module) => ({ default: module.Chart })),
 );
-import { convert, displayUnit, decimalPlaces, type Session } from "./types";
+import {
+  convert,
+  displayUnit,
+  decimalPlaces,
+  historyDisplayRange,
+  type Session,
+} from "./types";
 import "./session-analysis.css";
 
 type Run = {
@@ -138,10 +144,12 @@ function MeasurementCard({ measurement }: { measurement: Measurement }) {
   );
 }
 function ObservationCurve({
+  signalKey,
   signal,
   label,
   units,
 }: {
+  signalKey: string;
   signal: Observation;
   label: string;
   units: string;
@@ -150,6 +158,14 @@ function ObservationCurve({
   const muted = style.getPropertyValue("--muted").trim() || style.color;
   const accent = style.getPropertyValue("--accent").trim() || style.color;
   const line = style.getPropertyValue("--line").trim() || muted;
+  const scale = historyDisplayRange(
+    signalKey,
+    signal.unit,
+    units,
+    signal.curve.map(([, value]) =>
+      value === null ? null : convert(value, signal.unit, units),
+    ),
+  );
   return (
     <Suspense fallback={<p>Loading chart…</p>}>
       <Chart
@@ -175,7 +191,9 @@ function ObservationCurve({
           },
           yAxis: {
             type: "value",
-            scale: true,
+            min: scale.minimum,
+            max: scale.maximum,
+            splitNumber: 3,
             name: displayUnit(signal.unit, units),
             nameTextStyle: { color: muted },
             axisLabel: { color: muted },
@@ -240,6 +258,7 @@ function RecordedReadings({
       {signal.samples > 0 ? (
         <>
           <ObservationCurve
+            signalKey={key}
             signal={signal}
             label={signal.label}
             units={units}

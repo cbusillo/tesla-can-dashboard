@@ -103,6 +103,142 @@ export function canonicalDialLimit(
     ? original
     : toCanonical(value, unit, units);
 }
+type DisplayScale = {
+  dial: [number, number];
+  plotSpan: number;
+  zero?: boolean;
+  floorZero?: boolean;
+  imperial?: { dial: [number, number]; plotSpan: number };
+};
+const unitScales: Record<string, DisplayScale> = {
+  V: { dial: [250, 450], plotSpan: 10, floorZero: true },
+  A: { dial: [-1000, 1000], plotSpan: 100, zero: true },
+  kW: { dial: [-100, 400], plotSpan: 20, zero: true },
+  kWh: { dial: [0, 100], plotSpan: 5, floorZero: true },
+  "%": { dial: [0, 100], plotSpan: 10, floorZero: true },
+  mV: { dial: [0, 50], plotSpan: 10, floorZero: true },
+  "km/h": {
+    dial: [0, 160],
+    plotSpan: 20,
+    floorZero: true,
+    imperial: { dial: [0, 100], plotSpan: 10 },
+  },
+  "°C": {
+    dial: [-20, 120],
+    plotSpan: 20,
+    imperial: { dial: [0, 250], plotSpan: 40 },
+  },
+  bar: {
+    dial: [2, 4],
+    plotSpan: 0.4,
+    floorZero: true,
+    imperial: { dial: [25, 60], plotSpan: 5 },
+  },
+};
+const packTemperatureScale: DisplayScale = {
+  dial: [-20, 60],
+  plotSpan: 10,
+  imperial: { dial: [0, 140], plotSpan: 20 },
+};
+const cabinTemperatureScale: DisplayScale = {
+  dial: [15, 30],
+  plotSpan: 5,
+  imperial: { dial: [55, 85], plotSpan: 10 },
+};
+const signalScales: Record<string, DisplayScale> = {
+  outputLimitKw: { dial: [0, 400], plotSpan: 50, zero: true, floorZero: true },
+  regenLimitKw: { dial: [0, 100], plotSpan: 20, zero: true, floorZero: true },
+  chargingPowerKw: { dial: [0, 12], plotSpan: 2, zero: true, floorZero: true },
+  fullPackEnergyKwh: { ...unitScales.kWh, plotSpan: 1 },
+  minimumTemperatureC: packTemperatureScale,
+  maximumTemperatureC: packTemperatureScale,
+  driverTemperatureC: cabinTemperatureScale,
+  passengerTemperatureC: cabinTemperatureScale,
+};
+function axisStep(span: number) {
+  const size = span / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(size));
+  const fraction = size / magnitude;
+  return (
+    ([1, 2, 5, 10].find((step) => step >= fraction - 1e-12) ?? 10) * magnitude
+  );
+}
+export function dialRange(
+  definition: Definition | undefined,
+  reading: Reading | undefined,
+  units: string,
+  custom?: DialRange,
+): DialRange {
+  if (custom) return custom;
+  const unit = definition?.unit ?? reading?.unit ?? "";
+  const preset = signalScales[definition?.key ?? ""] ?? unitScales[unit];
+  const imperial = units === "imperial" ? preset?.imperial : undefined;
+  const canonical = preset?.dial ?? [
+    definition?.minimum ?? 0,
+    definition?.maximum ?? 100,
+  ];
+  let minimum = imperial?.dial[0] ?? convert(canonical[0], unit, units);
+  let maximum = imperial?.dial[1] ?? convert(canonical[1], unit, units);
+  const step = axisStep(maximum - minimum);
+  const seen = [
+    reading?.minimum,
+    reading?.maximum,
+    usableReading(reading) ? reading.value : null,
+  ]
+    .filter(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value),
+    )
+    .map((value) => convert(value, unit, units));
+  if (seen.length) {
+    minimum = Math.min(minimum, Math.floor(Math.min(...seen) / step) * step);
+    maximum = Math.max(maximum, Math.ceil(Math.max(...seen) / step) * step);
+  }
+  return {
+    minimum: toCanonical(minimum, unit, units),
+    maximum: toCanonical(maximum, unit, units),
+  };
+}
+export function historyDisplayRange(
+  key: string,
+  unit: string,
+  units: string,
+  values: (number | null)[],
+): DialRange {
+  const preset = signalScales[key] ?? unitScales[unit];
+  const valid = values.filter(
+    (value): value is number => value !== null && Number.isFinite(value),
+  );
+  const minSpan =
+    units === "imperial" && preset?.imperial
+      ? preset.imperial.plotSpan
+      : Math.abs(
+          convert(preset?.plotSpan ?? 1, unit, units) - convert(0, unit, units),
+        );
+  let minimum = valid.length ? Math.min(...valid) : 0;
+  let maximum = valid.length ? Math.max(...valid) : minSpan;
+  if (preset?.zero) {
+    minimum = Math.min(0, minimum);
+    maximum = Math.max(0, maximum);
+  }
+  const span = Math.max(maximum - minimum, minSpan);
+  const center = (minimum + maximum) / 2;
+  minimum = center - span * 0.6;
+  maximum = center + span * 0.6;
+  const step = axisStep(maximum - minimum);
+  minimum = Math.floor(minimum / step) * step;
+  maximum = Math.ceil(maximum / step) * step;
+  if (preset?.floorZero && valid.every((value) => value >= 0))
+    minimum = Math.max(0, minimum);
+  if (unit === "%" && valid.every((value) => value >= 0 && value <= 100)) {
+    minimum = Math.max(0, minimum);
+    maximum = Math.min(100, maximum);
+  }
+  return {
+    minimum: Number(minimum.toPrecision(12)),
+    maximum: Number(maximum.toPrecision(12)),
+  };
+}
 export function display(
   reading: Reading | undefined,
   units: string,

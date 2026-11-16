@@ -32,6 +32,7 @@ import {
   convert,
   formatDialLimit,
   canonicalDialLimit,
+  dialRange,
   display,
   displayUnit,
   initialLayout,
@@ -247,8 +248,7 @@ function App() {
     const range = layout.ranges[key];
     setRangeAuto(!range);
     const basis = {
-      minimum: range?.minimum ?? definition.minimum,
-      maximum: range?.maximum ?? definition.maximum,
+      ...dialRange(definition, signals[key], layout.units, range),
       unit: definition.unit,
       units: layout.units,
     };
@@ -329,12 +329,12 @@ function App() {
             <Dial
               reading={reading}
               unit={definition?.unit || ""}
-              range={
-                layout.ranges[key] || {
-                  minimum: definition?.minimum ?? 0,
-                  maximum: definition?.maximum ?? 100,
-                }
-              }
+              range={dialRange(
+                definition,
+                reading,
+                layout.units,
+                layout.ranges[key],
+              )}
               units={layout.units}
               dark={dark}
               label={label}
@@ -349,6 +349,7 @@ function App() {
         {layout.presentation === "history" && (
           <Suspense fallback={<p>Loading history…</p>}>
             <History
+              signalKey={key}
               reading={reading}
               units={layout.units}
               dark={dark}
@@ -543,6 +544,7 @@ function App() {
                 {tab === "instruments" && historyDefinition && (
                   <Suspense fallback={<p>Loading history…</p>}>
                     <History
+                      signalKey={historyKey}
                       reading={signals[historyKey]}
                       units={layout.units}
                       dark={dark}

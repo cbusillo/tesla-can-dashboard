@@ -142,6 +142,7 @@ export const BatteryHistory = memo(function BatteryHistory({
             {active && (
               <Suspense fallback={<p>Loading chart…</p>}>
                 <History
+                  signalKey={selected.key}
                   reading={reading(selected.key, selected.unit)}
                   units={units}
                   dark={dark}

@@ -21,6 +21,7 @@ import {
   display,
   displayUnit,
   decimalPlaces,
+  historyDisplayRange,
   readingStatus,
   usableReading,
   type DialRange,
@@ -225,6 +226,7 @@ export function Dial({
   );
 }
 export function History({
+  signalKey = "",
   reading,
   units,
   dark,
@@ -235,6 +237,7 @@ export function History({
   choices,
   range,
 }: {
+  signalKey?: string;
   reading: Reading | undefined;
   units: string;
   dark: boolean;
@@ -265,20 +268,15 @@ export function History({
   const values = history
     .map((point) => point[1])
     .filter((value): value is number => value !== null);
-  const lowest = values.length ? Math.min(...values) : 0;
-  const highest = values.length ? Math.max(...values) : 1;
   const categories = choices ? Object.keys(choices).map(Number) : [];
-  const padding = Math.max(
-    (highest - lowest) * 0.1,
-    Math.abs(highest) * 0.01,
-    reading?.unit === "kW"
-      ? 5
-      : reading?.unit === "A"
-        ? 1
-        : reading?.unit === "°C"
-          ? 1
-          : 0.1,
-  );
+  const scale = range
+    ? {
+        minimum: convert(range.minimum, reading?.unit || "", units),
+        maximum: convert(range.maximum, reading?.unit || "", units),
+      }
+    : categories.length
+      ? { minimum: Math.min(...categories), maximum: Math.max(...categories) }
+      : historyDisplayRange(signalKey, reading?.unit || "", units, values);
   const option: Option = {
     grid: { left: 48, right: 16, top: 12, bottom: 28 },
     tooltip: {
@@ -306,16 +304,8 @@ export function History({
     yAxis: {
       type: "value",
       splitNumber: 2,
-      min: range
-        ? convert(range.minimum, reading?.unit || "", units)
-        : categories.length
-          ? Math.min(...categories)
-          : lowest - padding,
-      max: range
-        ? convert(range.maximum, reading?.unit || "", units)
-        : categories.length
-          ? Math.max(...categories)
-          : highest + padding,
+      min: scale.minimum,
+      max: scale.maximum,
       interval: categories.length ? 1 : undefined,
       axisLabel: {
         color: color("chart-muted"),

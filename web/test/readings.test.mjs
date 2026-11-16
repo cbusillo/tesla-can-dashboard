@@ -10,6 +10,8 @@ import {
   nextCabinTemperature,
   formatDialLimit,
   canonicalDialLimit,
+  dialRange,
+  historyDisplayRange,
 } from "../src/types.ts";
 
 test("both-zone adjustment moves each side in the chosen direction and respects the supplied limits", () => {
@@ -130,4 +132,81 @@ test("rounded dial inputs preserve untouched limits and convert deliberate edits
   assert.equal(formatDialLimit(2, "bar", "imperial"), "29");
   const edited = canonicalDialLimit("30", 2, "bar", "imperial");
   assert.ok(edited > 2.06 && edited < 2.07);
+});
+
+test("automatic dials focus on driving readings and expand for retained extremes without changing custom limits", () => {
+  const definition = { key: "voltageV", unit: "V", minimum: 0, maximum: 1000 };
+  const normal = dialRange(definition, fresh(380, "V"), "metric");
+  assert.ok(normal.minimum > definition.minimum);
+  assert.ok(normal.maximum < definition.maximum);
+  assert.ok(normal.minimum <= 380 && normal.maximum >= 380);
+  const expanded = dialRange(
+    definition,
+    { ...fresh(380, "V"), minimum: 180, maximum: 520 },
+    "metric",
+  );
+  assert.ok(expanded.minimum <= 180 && expanded.maximum >= 520);
+  const custom = { minimum: 300, maximum: 420 };
+  assert.equal(
+    dialRange(definition, fresh(520, "V"), "imperial", custom),
+    custom,
+  );
+});
+
+test("US dials have readable endpoints and preserve canonical values", () => {
+  for (const [key, unit, value] of [
+    ["speedKph", "km/h", 80],
+    ["minimumTemperatureC", "°C", 20],
+    ["pressure", "bar", 2.8],
+  ]) {
+    const range = dialRange(
+      { key, unit, minimum: -100, maximum: 1000 },
+      fresh(value, unit),
+      "imperial",
+    );
+    for (const bound of [range.minimum, range.maximum]) {
+      const shown = convert(bound, unit, "imperial");
+      assert.ok(Math.abs(shown - Math.round(shown)) < 1e-9);
+    }
+    assert.ok(range.minimum <= value && range.maximum >= value);
+  }
+});
+
+test("history scales ignore gaps, resist tiny fluctuations and include all finite extremes", () => {
+  for (const [key, unit, values] of [
+    ["voltageV", "V", [379.99, null, 380.01]],
+    ["powerKw", "kW", [-65, null, 320]],
+    ["minimumTemperatureC", "°C", [-12, -11.99]],
+    ["displayedChargePercent", "%", [0, 100]],
+  ]) {
+    const scale = historyDisplayRange(key, unit, "metric", [
+      ...values,
+      NaN,
+      Infinity,
+    ]);
+    const numbers = values.filter((value) => value !== null);
+    assert.ok(scale.minimum <= Math.min(...numbers));
+    assert.ok(scale.maximum >= Math.max(...numbers));
+    assert.ok(scale.maximum - scale.minimum > 1);
+  }
+  const metric = historyDisplayRange("minimumTemperatureC", "°C", "metric", [
+    20,
+  ]);
+  const imperial = historyDisplayRange(
+    "minimumTemperatureC",
+    "°C",
+    "imperial",
+    [68],
+  );
+  assert.ok(
+    imperial.maximum - imperial.minimum < (metric.maximum - metric.minimum) * 3,
+  );
+  const zero = historyDisplayRange("powerKw", "kW", "metric", [0, null]);
+  assert.ok(
+    zero.minimum < zero.maximum && zero.minimum <= 0 && zero.maximum >= 0,
+  );
+  const missing = historyDisplayRange("unknown", "", "metric", [null, NaN]);
+  assert.ok(
+    Number.isFinite(missing.minimum) && missing.maximum > missing.minimum,
+  );
 });

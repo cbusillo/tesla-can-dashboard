@@ -57,6 +57,12 @@ charger line power and charge-limit signals when names and units match.
 Unavailable signals remain unavailable. No third-party DBC or real vehicle
 recording is distributed here. See [Pi installation](deploy/README.md).
 
+Dials use driving-oriented display ranges, separate from decoder validity limits.
+Automatic ranges expand to include observed extremes; custom ranges stay fixed.
+Live, battery-history and saved-session graphs use rounded axes with a minimum
+span so small fluctuations remain in proportion. US units use readable display
+endpoints. Change dial limits in Edit mode.
+
 ## Limits of this preview
 
 Pack current direction defaults to unqualified. An operator who has qualified
