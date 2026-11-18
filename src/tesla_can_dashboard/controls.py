@@ -65,8 +65,9 @@ def valid_charge_limit(value: object) -> bool:
 
 
 class VehicleControls:
-    def __init__(self, engine: Engine, socket_path: Path, token_file: Path) -> None:
+    def __init__(self, engine: Engine, socket_path: Path, token_file: Path, *, charge_port: bool = False) -> None:
         self.engine = engine
+        self.charge_port = charge_port
         self.socket_path = socket_path
         self.token = token_file.read_text().strip()
         if len(self.token) < 32:
@@ -222,7 +223,21 @@ class VehicleControls:
             raise ValueError("Choose a whole percentage from 50 to 100")
         return self._change("chargeLimitPercent", percent, ("chargeLimitPercent",), nonce, confirmation_seconds)
 
-    def _change(self, field: str, target: float | int, keys: tuple[str, ...], nonce: str, confirmation_seconds: float) -> dict:
+    def change_charge_port(self, opened: bool, nonce: str, confirmation_seconds: float = 5) -> dict:
+        if not self.charge_port or type(opened) is not bool:
+            raise ValueError("Charge port controls are not enabled")
+        return self._change("chargePortOpen", opened, ("chargePortOpen",), nonce, confirmation_seconds, parked=True)
+
+    def _change(
+        self,
+        field: str,
+        target: float | int,
+        keys: tuple[str, ...],
+        nonce: str,
+        confirmation_seconds: float,
+        *,
+        parked: bool = False,
+    ) -> dict:
         with self.nonce_lock:
             expires = self.nonces.pop(nonce, 0)
         if expires <= time.monotonic():
@@ -233,6 +248,8 @@ class VehicleControls:
             self.lock.release()
             raise ValueError("Replay is changing; check the live view")
         try:
+            if parked and self._live_values(("driveGear",)) != {"driveGear": 1}:
+                raise ValueError("Park the car before using the charge port")
             before = self._live_values(keys)
             if before is None:
                 raise ValueError("Live readings are unavailable")

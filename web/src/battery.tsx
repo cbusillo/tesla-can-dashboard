@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { BatteryHistory } from "./battery-history";
 import { Metric, Value } from "./dashboard";
 import { ChargeLimit } from "./charge-limit";
+import { ChargePort } from "./charge-port";
 import { readingStatus, usableReading, type Snapshot } from "./types";
 import type { VehicleControls } from "./vehicle-controls";
 
@@ -138,6 +139,7 @@ export function Battery({
           controls={controls}
           active={active && controlsOpen}
         />
+        <ChargePort data={data} controls={controls} />
       </details>
     </main>
   );
