@@ -493,7 +493,7 @@ def test_charge_port_helper_opt_in_uses_fixed_command(tmp_path: Path, monkeypatc
     bluetooth.charge_port = True
     calls = []
 
-    def run(arguments: list[str], **kwargs) -> subprocess.CompletedProcess:
+    def run(arguments: list[str], **_kwargs) -> subprocess.CompletedProcess:
         calls.append(arguments)
         return subprocess.CompletedProcess(arguments, 0)
 
