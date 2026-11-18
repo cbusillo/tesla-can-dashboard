@@ -103,6 +103,12 @@ class TemperatureRequest(BaseModel):
         return value
 
 
+class ChargePortRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    open: bool = Field(strict=True)
+    nonce: str = Field(min_length=1, max_length=64)
+
+
 class ChargeLimitRequest(BaseModel):
     model_config = {"extra": "forbid"}
     percent: int = Field(strict=True)
@@ -242,7 +248,7 @@ def create_app(
         return {
             "available": controls is not None,
             "connected": has_controls_access(request),
-            "actions": ["temperature", "charge-limit"] if controls else [],
+            "actions": (["temperature", "charge-limit"] + (["charge-port"] if controls.charge_port else [])) if controls else [],
             "temperature": {"minimumC": MINIMUM_TEMPERATURE_C, "maximumC": MAXIMUM_TEMPERATURE_C, "stepC": TEMPERATURE_STEP_C},
             "chargeLimit": {"minimumPercent": MINIMUM_CHARGE_LIMIT_PERCENT, "maximumPercent": MAXIMUM_CHARGE_LIMIT_PERCENT},
         }
@@ -334,6 +340,14 @@ def create_app(
         controller = authorize_controls(request)
         try:
             return controller.change_charge_limit(body.percent, body.nonce)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @app.post("/api/vehicle-controls/charge-port")
+    def change_charge_port(body: ChargePortRequest, request: Request) -> dict:
+        controller = authorize_controls(request)
+        try:
+            return controller.change_charge_port(body.open, body.nonce)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
 

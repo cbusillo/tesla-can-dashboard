@@ -2,7 +2,8 @@ import { useState } from "preact/hooks";
 import { BatteryHistory } from "./battery-history";
 import { Metric, Value } from "./dashboard";
 import { ChargeLimit } from "./charge-limit";
-import { readingStatus, usableReading, type Snapshot } from "./types";
+import { ChargePort } from "./charge-port";
+import { readingStatus, usableReading, type Definition, type Snapshot } from "./types";
 import type { VehicleControls } from "./vehicle-controls";
 
 export function Battery({
@@ -11,12 +12,14 @@ export function Battery({
   dark,
   active,
   controls,
+  catalog,
 }: {
   data: Snapshot | null;
   units: string;
   dark: boolean;
   active: boolean;
   controls: VehicleControls;
+  catalog: Definition[];
 }) {
   const [controlsOpen, setControlsOpen] = useState(false);
   const signals = data?.signals || {};
@@ -138,6 +141,7 @@ export function Battery({
           controls={controls}
           active={active && controlsOpen}
         />
+        <ChargePort data={data} controls={controls} definition={catalog.find(item => item.key === "chargePortOpen")} />
       </details>
     </main>
   );

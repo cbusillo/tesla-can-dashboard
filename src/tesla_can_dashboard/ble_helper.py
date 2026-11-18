@@ -15,9 +15,10 @@ from .controls import valid_charge_limit, valid_temperature
 
 
 class BluetoothControls:
-    def __init__(self, key_directory: Path, log_path: Path | None = None) -> None:
+    def __init__(self, key_directory: Path, log_path: Path | None = None, *, charge_port: bool = False) -> None:
         self.directory = key_directory
         self.log_path = log_path
+        self.charge_port = charge_port
 
     @staticmethod
     def _radio(*arguments: str) -> str:
@@ -30,7 +31,12 @@ class BluetoothControls:
     def change_charge_limit(self, percent: int) -> dict:
         return self._run("charging-set-limit", str(percent))
 
-    def _run(self, command: str, value: str) -> dict:
+    def change_charge_port(self, opened: bool) -> dict:
+        if not self.charge_port or type(opened) is not bool:
+            raise ValueError("Charge port controls are not enabled")
+        return self._run("charge-port-open" if opened else "charge-port-close")
+
+    def _run(self, command: str, *arguments: str) -> dict:
         prior = self._radio("--noheadings", "--output", "SOFT", "list", "bluetooth")
         if prior not in {"blocked", "unblocked"}:
             return {"outcome": "unknown"}
@@ -53,7 +59,7 @@ class BluetoothControls:
                         "-command-timeout",
                         "10s",
                         command,
-                        value,
+                        *arguments,
                     ],
                     env=environment,
                     stdout=output,
@@ -83,19 +89,22 @@ class ControlHandler(socketserver.StreamRequestHandler):
         if uid != server.allowed_uid:
             logging.getLogger(__name__).warning("Rejected a vehicle request from an unexpected local identity")
             return
-        outcome = {"outcome": "unknown"}
+        outcome = {"outcome": "not-sent"}
         try:
             request = json.loads(self.rfile.readline(1024))
             if not isinstance(request, dict):
                 return
             if set(request) == {"temperatureC"} and valid_temperature(request["temperatureC"]):
+                outcome = {"outcome": "unknown"}
                 outcome = server.bluetooth.change(request["temperatureC"])
             elif set(request) == {"chargeLimitPercent"} and valid_charge_limit(request["chargeLimitPercent"]):
+                outcome = {"outcome": "unknown"}
                 outcome = server.bluetooth.change_charge_limit(request["chargeLimitPercent"])
-            else:
-                return
+            elif set(request) == {"chargePortOpen"} and type(request["chargePortOpen"]) is bool and server.bluetooth.charge_port:
+                outcome = {"outcome": "unknown"}
+                outcome = server.bluetooth.change_charge_port(request["chargePortOpen"])
         except (OSError, ValueError, subprocess.SubprocessError):
-            logging.getLogger(__name__).warning("Vehicle command outcome is unknown")
+            logging.getLogger(__name__).warning("Vehicle request did not complete")
         self.wfile.write(json.dumps(outcome).encode() + b"\n")
 
 
@@ -109,13 +118,15 @@ def main() -> None:
     parser.add_argument("--key-directory", type=Path, required=True)
     parser.add_argument("--allowed-user", required=True)
     parser.add_argument("--socket-group", required=True)
+    parser.add_argument("--enable-charge-port", action="store_true", help="Enable only after parked target qualification")
     args = parser.parse_args()
     os.umask(0o077)
     uid = pwd.getpwnam(args.allowed_user).pw_uid
     gid = grp.getgrnam(args.socket_group).gr_gid
     if uid == 0 or uid == 65534 or gid == 65534:
         parser.error("Use a dedicated dashboard account and group")
-    with ControlServer(args.socket, uid, BluetoothControls(args.key_directory, args.socket.parent / "last-attempt.log")) as server:
+    bluetooth = BluetoothControls(args.key_directory, args.socket.parent / "last-attempt.log", charge_port=args.enable_charge_port)
+    with ControlServer(args.socket, uid, bluetooth) as server:
         os.chown(args.socket, 0, gid)
         os.chmod(args.socket, 0o660)
         server.serve_forever()

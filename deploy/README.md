@@ -117,9 +117,12 @@ is not automatically compatible with all car firmware. Keep the existing qualifi
 battery, cell and driving definitions when extending a profile.
 
 The UI exposes both-zone temperature and charge-limit changes. It does not
-send charging start/stop, current, schedule, seat or climate on/off commands.
+enable other vehicle commands by default. Optional charge-port open/close
+support is prepared separately; see [control capabilities](../docs/control-capabilities.md).
+The default installation does not expose charging start/stop, current, schedule,
+seat or climate on/off commands.
 Startup, reconnect, page reload and replay never send a vehicle command. Controls
-require a live receiver with fresh valid cabin setpoints. Nonces expire after a
+require a live receiver with the fresh readings listed in the capability guide. Nonces expire after a
 minute and are consumed before any attempt. An unknown outcome is not retried;
 the next request must follow an explicit user action and current car readings.
 Rollback removes both dashboard control flags and stops/disables only this helper.

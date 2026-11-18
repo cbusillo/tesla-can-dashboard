@@ -32,6 +32,7 @@ SIGNALS = (
     SignalDefinition("maximumTemperatureC", "Maximum pack temperature", "°C", "battery", -60, 150, 30),
     SignalDefinition("chargingPowerKw", "Charger line power", "kW", "charging", 0, 1000),
     SignalDefinition("chargeLimitPercent", "Charge limit", "%", "charging", 0, 100, 30),
+    SignalDefinition("chargePortOpen", "Charge port", "", "charging", 0, 1, choices={0: "Closed", 1: "Open"}),
     SignalDefinition(
         "driveGear", "Gear", "", "drive", 1, 4, 0.5, {value: name.removeprefix("DI_GEAR_") for name, value in DRIVE_GEARS.items()}
     ),
@@ -50,7 +51,12 @@ CATALOG = {definition.key: definition for definition in SIGNALS}
 
 def is_valid_signal(key: str, value: float | None) -> bool:
     definition = CATALOG[key]
-    return value is not None and math.isfinite(value) and definition.minimum <= value <= definition.maximum
+    return (
+        value is not None
+        and math.isfinite(value)
+        and definition.minimum <= value <= definition.maximum
+        and (definition.choices is None or value in definition.choices)
+    )
 
 
 @dataclass

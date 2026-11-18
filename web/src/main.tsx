@@ -574,6 +574,7 @@ function App() {
             dark={dark}
             active={tab === "charging"}
             controls={vehicleControls}
+            catalog={catalog}
           />
         </Page>
         <Page name="sessions" title="Sessions" {...common}>

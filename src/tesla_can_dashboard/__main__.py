@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("--allowed-origin", action="append", default=[])
     parser.add_argument("--controls-socket", type=Path, help="Opt-in private Bluetooth helper socket")
     parser.add_argument("--controls-token-file", type=Path, help="Private browser access-code file, separate from the vehicle key")
+    parser.add_argument("--enable-charge-port", action="store_true", help="Enable only after parked target qualification")
     parser.add_argument("--recording-limit-mib", type=int, default=256)
     args = parser.parse_args()
     if not 1 <= args.cells <= 200 or args.recording_limit_mib < 1:
@@ -40,6 +41,8 @@ def main() -> None:
         parser.error("Automatic recording requires a live --interface")
     if bool(args.controls_socket) != bool(args.controls_token_file) or (args.controls_socket and not args.interface):
         parser.error("Controls require a live interface, helper socket and access-code file")
+    if args.enable_charge_port and not args.controls_socket:
+        parser.error("Charge port controls require the private Bluetooth helper")
     recorder = Recorder(args.data_dir / "recordings", args.recording_limit_mib * 1024 * 1024)
     engine = Engine(
         args.interface,
@@ -50,7 +53,11 @@ def main() -> None:
         discharge_current=args.discharge_current,
         auto_drives=args.record_drives,
     )
-    controls = VehicleControls(engine, args.controls_socket, args.controls_token_file) if args.controls_socket else None
+    controls = (
+        VehicleControls(engine, args.controls_socket, args.controls_token_file, charge_port=args.enable_charge_port)
+        if args.controls_socket
+        else None
+    )
     app = create_app(engine, args.data_dir, args.assets, set(args.allowed_origin) or None, args.designs, controls)
     uvicorn.run(app, host=args.bind, port=args.port)
 
