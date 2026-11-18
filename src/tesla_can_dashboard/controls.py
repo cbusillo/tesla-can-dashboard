@@ -211,6 +211,8 @@ class VehicleControls:
             connection.sendall(json.dumps(payload).encode() + b"\n")
             with connection.makefile("rb") as response:
                 data = json.loads(response.readline(1024))
+            if data.get("outcome") == "not-sent":
+                raise HelperUnavailable
             return "acknowledged" if data.get("outcome") == "acknowledged" else "unknown"
 
     def change(self, temperature: float, nonce: str, confirmation_seconds: float = 5) -> dict:

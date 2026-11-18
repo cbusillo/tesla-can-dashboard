@@ -26,6 +26,9 @@ Keep both services' normal arguments unchanged until an owner-observed parked
 test is prepared. First qualify the operator DBC's `CP_chargeDoorOpen` reading
 against the actual door. The app accepts dimensionless binary feedback and
 preserves missing, invalid and stale values. No raw layout is bundled.
+Passively verify that a plugged-in cable reads Open before disconnecting it for
+the command test; an already-open target sends nothing. Do not qualify a latch,
+request or displayed estimate as the physical door reading.
 
 On an isolated qualification installation, add `--enable-charge-port` to both
 the dashboard and helper commands. The dashboard also needs its existing
@@ -45,6 +48,8 @@ readings must be fresh before sending. A single-use request sends once; a later
 matching CAN sample confirms the result even when Bluetooth acknowledgement
 was lost. An acknowledgement alone remains unconfirmed. Check actual state
 before any deliberate retry; reload, reconnect and service startup send nothing.
+If the helper has not enabled this action, it rejects the request explicitly as
+not sent rather than reporting an uncertain vehicle response.
 
 After an unsuccessful qualification, remove the option from both service
 commands and return to their saved units. This hides the buttons and restores

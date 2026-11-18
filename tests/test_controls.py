@@ -193,7 +193,13 @@ def test_missing_helper_is_not_reported_as_an_uncertain_vehicle_command(controll
 
 
 @pytest.mark.parametrize(
-    "reply,expected", [(b'{"outcome":"acknowledged"}\n', "acknowledged"), (b'{"outcome":"unknown"}\n', "unknown"), (b"", "unknown")]
+    "reply,expected",
+    [
+        (b'{"outcome":"acknowledged"}\n', "acknowledged"),
+        (b'{"outcome":"unknown"}\n', "unknown"),
+        (b"", "unknown"),
+        (b'{"outcome":"not-sent"}\n', "not-sent"),
+    ],
 )
 def test_helper_wire_reply_preserves_acknowledgement_and_uncertainty(
     controller: VehicleControls, reply: bytes, expected: str
@@ -210,7 +216,11 @@ def test_helper_wire_reply_preserves_acknowledgement_and_uncertainty(
 
         thread = threading.Thread(target=respond, daemon=True)
         thread.start()
-        assert controller.change(20, controller.issue_nonce(), confirmation_seconds=0.01)["outcome"] == expected
+        if expected == "not-sent":
+            with pytest.raises(ValueError, match="No change was sent"):
+                controller.change(20, controller.issue_nonce(), confirmation_seconds=0.01)
+        else:
+            assert controller.change(20, controller.issue_nonce(), confirmation_seconds=0.01)["outcome"] == expected
         thread.join(2)
         assert not thread.is_alive()
 
@@ -286,22 +296,33 @@ def test_charge_endpoint_requires_access_and_does_not_accept_other_commands(
 
 @pytest.mark.skipif(not hasattr(socket, "SO_PEERCRED"), reason="Linux peer credentials")
 @pytest.mark.parametrize(
-    "payload,accepted",
+    "charge_port,payload,accepted",
     [
-        ({"chargeLimitPercent": 69}, True),
-        ({"chargeLimitPercent": True}, False),
-        ({"chargeLimitPercent": 70.5}, False),
-        ({"chargeLimitPercent": 69, "temperatureC": 20}, False),
-        ({"command": "charging-start"}, False),
+        (False, {"chargeLimitPercent": 69}, True),
+        (False, {"chargeLimitPercent": True}, False),
+        (False, {"chargeLimitPercent": 70.5}, False),
+        (False, {"chargeLimitPercent": 69, "temperatureC": 20}, False),
+        (False, {"command": "charging-start"}, False),
+        (True, {"chargePortOpen": True}, True),
+        (True, {"chargePortOpen": False}, True),
+        (False, {"chargePortOpen": True}, False),
+        (True, {"chargePortOpen": 1}, False),
+        (True, {"chargePortOpen": "true"}, False),
+        (True, {"chargePortOpen": True, "command": "unlock"}, False),
     ],
 )
-def test_helper_whitelist_accepts_only_the_single_valid_charge_limit(
-    tmp_path: Path, monkeypatch, payload: dict, accepted: bool
+def test_helper_whitelist_accepts_only_enabled_single_valid_requests(
+    tmp_path: Path, monkeypatch, charge_port: bool, payload: dict, accepted: bool
 ) -> None:
-    bluetooth = BluetoothControls(tmp_path)
+    bluetooth = BluetoothControls(tmp_path, charge_port=charge_port)
     calls = []
     monkeypatch.setattr(bluetooth, "change", lambda _: pytest.fail("No temperature command expected"))
-    monkeypatch.setattr(bluetooth, "change_charge_limit", lambda value: calls.append(value) or {"outcome": "acknowledged"})
+    monkeypatch.setattr(
+        bluetooth, "change_charge_limit", lambda value: calls.append({"chargeLimitPercent": value}) or {"outcome": "acknowledged"}
+    )
+    monkeypatch.setattr(
+        bluetooth, "change_charge_port", lambda value: calls.append({"chargePortOpen": value}) or {"outcome": "acknowledged"}
+    )
     with TemporaryDirectory(prefix="tc-", dir="/tmp") as directory:
         path = Path(directory) / "s"
         with ControlServer(path, os.getuid(), bluetooth) as server:
@@ -310,10 +331,11 @@ def test_helper_whitelist_accepts_only_the_single_valid_charge_limit(
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
                 peer.connect(str(path))
                 peer.sendall(json.dumps(payload).encode() + b"\n")
-                peer.recv(1024)
+                response = json.loads(peer.recv(1024))
             thread.join(2)
             assert not thread.is_alive()
-    assert calls == ([payload["chargeLimitPercent"]] if accepted else [])
+    assert calls == ([payload] if accepted else [])
+    assert response["outcome"] == ("acknowledged" if accepted else "not-sent")
 
 
 def test_charge_helper_invokes_only_the_fixed_limit_command(tmp_path: Path, monkeypatch) -> None:
@@ -355,3 +377,126 @@ def test_helper_rejects_another_local_identity_before_reading_command(tmp_path: 
             assert client.recv(100) == b""
         thread.join(2)
         assert not thread.is_alive()
+
+
+@pytest.fixture
+def controls(controller: VehicleControls) -> VehicleControls:
+    controller.charge_port = True
+    controller.engine.store.update({"chargePortOpen": 0, "driveGear": 1}, {}, time.time())
+    return controller
+
+
+def test_charge_door_feedback_comes_from_operator_profile(tmp_path: Path) -> None:
+    profile = tmp_path / "synthetic.dbc"
+    profile.write_text("""VERSION "synthetic"
+NS_ :
+BS_:
+BU_: TEST
+BO_ 100 ChargeDoor: 1 TEST
+ SG_ CP_chargeDoorOpen : 0|1@1+ (1,0) [0|1] "" TEST
+""")
+    decoder = Decoder(profile)
+    assert decoder.decode(100, b"\x01")[0] == {"chargePortOpen": 1}
+    assert decoder.decode(100, b"\x00")[0] == {"chargePortOpen": 0}
+
+
+def test_fractional_door_or_gear_reading_is_invalid() -> None:
+    store = SignalStore()
+    store.update({"chargePortOpen": 0.5, "driveGear": 1.5}, {}, time.time())
+    snapshot = store.snapshot()
+    assert snapshot["signals"]["chargePortOpen"]["quality"] == "invalid"
+    assert snapshot["signals"]["driveGear"]["quality"] == "invalid"
+
+
+@pytest.mark.parametrize("condition", ["disabled", "drive", "reverse", "neutral", "gear-stale", "door-stale", "missing", "replay"])
+def test_charge_port_never_sends_without_enabled_live_park(controls: VehicleControls, monkeypatch, condition: str) -> None:
+    monkeypatch.setattr(controls, "_send", lambda _: pytest.fail("No command is permitted"))
+    if condition == "disabled":
+        controls.charge_port = False
+    elif condition in {"drive", "reverse", "neutral"}:
+        controls.engine.store.update({"driveGear": {"drive": 4, "reverse": 2, "neutral": 3}[condition]}, {}, time.time())
+    elif condition.endswith("stale"):
+        key = "driveGear" if condition == "gear-stale" else "chargePortOpen"
+        controls.engine.store.series[key].sample.received_at -= 10
+    elif condition == "missing":
+        controls.engine.store.series["chargePortOpen"].sample = None
+    else:
+        controls.engine.replay_state = "playing"
+    expected = "unavailable" if condition in {"door-stale", "missing"} else "enabled" if condition == "disabled" else "Park"
+    with pytest.raises(ValueError, match=expected):
+        controls.change_charge_port(True, controls.issue_nonce(), confirmation_seconds=0)
+
+
+def test_charge_port_requires_later_feedback_and_never_retries(controls: VehicleControls, monkeypatch) -> None:
+    sent = []
+
+    def send(payload: dict) -> str:
+        sent.append(payload)
+        return "acknowledged"
+
+    monkeypatch.setattr(controls, "_send", send)
+    nonce = controls.issue_nonce()
+    assert controls.change_charge_port(True, nonce, confirmation_seconds=0)["outcome"] == "acknowledged"
+    with pytest.raises(ValueError):
+        controls.change_charge_port(True, nonce, confirmation_seconds=0)
+    assert sent == [{"chargePortOpen": True}]
+
+    def confirmed(payload: dict) -> str:
+        controls.engine.store.update({"chargePortOpen": int(payload["chargePortOpen"])}, {}, time.time())
+        raise TimeoutError
+
+    monkeypatch.setattr(controls, "_send", confirmed)
+    assert controls.change_charge_port(True, controls.issue_nonce())["outcome"] == "confirmed"
+    monkeypatch.setattr(controls, "_send", lambda _: pytest.fail("Already open"))
+    assert controls.change_charge_port(True, controls.issue_nonce())["outcome"] == "unchanged"
+
+
+def test_charge_port_api_requires_authentication_opt_in_and_strict_payload(
+    controls: VehicleControls, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(controls.engine, "start", lambda: None)
+    app = create_app(controls.engine, tmp_path, controls=controls)
+    headers = {"Origin": "http://localhost:8088", "Authorization": f"Bearer {controls.token}"}
+    with TestClient(app) as client:
+        assert "charge-port" in client.get("/api/vehicle-controls").json()["actions"]
+        assert (
+            client.post(
+                "/api/vehicle-controls/charge-port", headers={"Origin": headers["Origin"]}, json={"open": True, "nonce": "unused"}
+            ).status_code
+            == 401
+        )
+        for body in [
+            {"open": "true", "nonce": "unused"},
+            {"open": 1, "nonce": "unused"},
+            {"open": True, "nonce": "unused", "command": "unlock"},
+        ]:
+            assert client.post("/api/vehicle-controls/charge-port", headers=headers, json=body).status_code == 422
+        controls.charge_port = False
+        assert "charge-port" not in client.get("/api/vehicle-controls").json()["actions"]
+        assert (
+            client.post(
+                "/api/vehicle-controls/charge-port", headers=headers, json={"open": True, "nonce": controls.issue_nonce()}
+            ).status_code
+            == 409
+        )
+
+
+@pytest.mark.parametrize("opened,command", [(True, "charge-port-open"), (False, "charge-port-close")])
+def test_charge_port_helper_opt_in_uses_fixed_command(tmp_path: Path, monkeypatch, opened: bool, command: str) -> None:
+    (tmp_path / "vin").write_text("synthetic-target")
+    bluetooth = BluetoothControls(tmp_path)
+    radio = []
+    monkeypatch.setattr(bluetooth, "_radio", lambda *args: radio.append(args) or "blocked")
+    with pytest.raises(ValueError):
+        bluetooth.change_charge_port(opened)
+    assert radio == []
+    bluetooth.charge_port = True
+    calls = []
+
+    def run(arguments: list[str], **kwargs) -> subprocess.CompletedProcess:
+        calls.append(arguments)
+        return subprocess.CompletedProcess(arguments, 0)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert bluetooth.change_charge_port(opened)["outcome"] == "acknowledged"
+    assert calls[0][-1] == command

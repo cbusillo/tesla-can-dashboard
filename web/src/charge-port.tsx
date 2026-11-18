@@ -1,14 +1,14 @@
-import type { Snapshot } from "./types";
+import { display, type Definition, type Snapshot } from "./types";
 import type { VehicleControls } from "./vehicle-controls";
 
-export function ChargePort({ data, controls }: { data: Snapshot | null; controls: VehicleControls }) {
+export function ChargePort({ data, controls, definition }: { data: Snapshot | null; controls: VehicleControls; definition?: Definition }) {
   if (!controls.capabilities?.actions.includes("charge-port")) return null;
   const reading = data?.signals.chargePortOpen;
   const gear = data?.signals.driveGear;
   const fresh = data?.mode === "live" && data.connection.state === "connected" && reading?.quality === "fresh";
   const parked = gear?.quality === "fresh" && gear.value === 1;
   const opened = reading?.value === 1;
-  const label = fresh ? (opened ? "Open" : "Closed") : "Unavailable";
+  const label = fresh && definition?.choices ? display(reading, "metric", 0, definition.choices) : "Unavailable";
   return <section class="climate-panel" aria-label="Charge port">
     <div class="section-heading"><h2>Charge port</h2><strong>{label}</strong></div>
     {controls.connected && <>

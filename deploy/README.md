@@ -122,7 +122,7 @@ support is prepared separately; see [control capabilities](../docs/control-capab
 The default installation does not expose charging start/stop, current, schedule,
 seat or climate on/off commands.
 Startup, reconnect, page reload and replay never send a vehicle command. Controls
-require a live receiver with fresh valid cabin setpoints. Nonces expire after a
+require a live receiver with the fresh readings listed in the capability guide. Nonces expire after a
 minute and are consumed before any attempt. An unknown outcome is not retried;
 the next request must follow an explicit user action and current car readings.
 Rollback removes both dashboard control flags and stops/disables only this helper.

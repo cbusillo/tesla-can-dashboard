@@ -89,21 +89,22 @@ class ControlHandler(socketserver.StreamRequestHandler):
         if uid != server.allowed_uid:
             logging.getLogger(__name__).warning("Rejected a vehicle request from an unexpected local identity")
             return
-        outcome = {"outcome": "unknown"}
+        outcome = {"outcome": "not-sent"}
         try:
             request = json.loads(self.rfile.readline(1024))
             if not isinstance(request, dict):
                 return
             if set(request) == {"temperatureC"} and valid_temperature(request["temperatureC"]):
+                outcome = {"outcome": "unknown"}
                 outcome = server.bluetooth.change(request["temperatureC"])
             elif set(request) == {"chargeLimitPercent"} and valid_charge_limit(request["chargeLimitPercent"]):
+                outcome = {"outcome": "unknown"}
                 outcome = server.bluetooth.change_charge_limit(request["chargeLimitPercent"])
             elif set(request) == {"chargePortOpen"} and type(request["chargePortOpen"]) is bool and server.bluetooth.charge_port:
+                outcome = {"outcome": "unknown"}
                 outcome = server.bluetooth.change_charge_port(request["chargePortOpen"])
-            else:
-                return
         except (OSError, ValueError, subprocess.SubprocessError):
-            logging.getLogger(__name__).warning("Vehicle command outcome is unknown")
+            logging.getLogger(__name__).warning("Vehicle request did not complete")
         self.wfile.write(json.dumps(outcome).encode() + b"\n")
 
 
