@@ -1,0 +1,34 @@
+{
+  "defaultBranch": "main",
+  "projectType": "python-web-dashboard",
+  "qualityGate": {
+    "inspection": {
+      "tool": "jetbrains",
+      "profile": ".idea/inspectionProfiles/Project_Default.xml",
+      "lanes": [
+        {
+          "id": "python",
+          "ide": "PyCharm",
+          "required": true,
+          "include": [
+            "*.py",
+            "src/**/*.py",
+            "tests/**/*.py",
+            "extras/**/*.py",
+            ".github/workflows/*.yml",
+            ".github/workflows/*.yaml"
+          ]
+        }
+      ],
+      "prepare": {
+        "python": {
+          "version": "3.11",
+          "moduleName": "tesla-can-dashboard",
+          "testRoots": ["tests"],
+          "sync": true
+        }
+      },
+      "scopePreference": ["changed_files", "directory", "whole_project"]
+    }
+  }
+}
