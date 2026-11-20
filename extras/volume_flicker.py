@@ -10,35 +10,44 @@ from pathlib import Path
 DEFAULT_INTERFACE = "can0"
 VOLUME_SWITCH_CAN_ID = 0x3C2
 SCROLL_MULTIPLEXER = 1
+SCROLL_MULTIPLEXER_MASK = 0x01
 SCROLL_TICKS_MASK = 0x3F
 SCROLL_DOWN = -1
 SCROLL_UP = 1
 FRAME_DATA_LENGTH = 8
-PAUSE_BETWEEN_SCROLLS_SECONDS = 0.01
 FLICK_INTERVAL_SECONDS = 10.0
 FLICK_JITTER_SECONDS = 3.0
-TRAFFIC_MAX_AGE_SECONDS = 0.5
+NEUTRAL_FRAME_TIMEOUT_SECONDS = 0.5
 STARTUP_GRACE_SECONDS = 5.0
+CAN_IDENTIFIER_MASK = 0x1FFFFFFF
 SOCKETCAN_FRAME = struct.Struct("=IB3x8s")
 
 _logger = logging.getLogger("tesla-volume-flicker")
 
 
-def build_scroll_frame(ticks: int) -> bytes:
-    data = bytes([SCROLL_MULTIPLEXER, 0, ticks & SCROLL_TICKS_MASK]).ljust(FRAME_DATA_LENGTH, b"\0")
+def build_scroll_frame(native_neutral: bytes, ticks: int) -> bytes:
+    data = bytearray(native_neutral)
+    data[2] = (data[2] & ~SCROLL_TICKS_MASK) | (ticks & SCROLL_TICKS_MASK)
     return SOCKETCAN_FRAME.pack(VOLUME_SWITCH_CAN_ID, FRAME_DATA_LENGTH, data)
+
+
+def extract_native_neutral(packet: bytes) -> bytes | None:
+    if len(packet) != SOCKETCAN_FRAME.size:
+        return None
+    can_id, data_length, data = SOCKETCAN_FRAME.unpack(packet)
+    if can_id & CAN_IDENTIFIER_MASK != VOLUME_SWITCH_CAN_ID or data_length != FRAME_DATA_LENGTH:
+        return None
+    if data[0] & SCROLL_MULTIPLEXER_MASK != SCROLL_MULTIPLEXER:
+        return None
+    if data[2] & SCROLL_TICKS_MASK:
+        return None
+    return data
 
 
 def open_can_socket(interface: str) -> socket.socket:
     can_socket = socket.socket(socket.AF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
     can_socket.bind((interface,))
     return can_socket
-
-
-def flick_volume(can_socket: socket.socket) -> None:
-    can_socket.send(build_scroll_frame(SCROLL_DOWN))
-    time.sleep(PAUSE_BETWEEN_SCROLLS_SECONDS)
-    can_socket.send(build_scroll_frame(SCROLL_UP))
 
 
 def next_flick_delay() -> float:
@@ -51,25 +60,34 @@ def main() -> None:
     carrier = Path("/sys/class/net") / interface / "carrier"
     started_at = time.monotonic()
     next_flick = started_at + next_flick_delay()
-    last_received: float | None = None
+    restore_deadline: float | None = None
     with open_can_socket(interface) as can_socket:
         can_socket.settimeout(0.25)
         _logger.info("Volume flicker ready on %s", interface)
         while True:
             try:
                 packet = can_socket.recv(SOCKETCAN_FRAME.size)
-                if len(packet) == SOCKETCAN_FRAME.size:
-                    last_received = time.monotonic()
             except TimeoutError:
+                packet = b""
                 if carrier.read_text().strip() != "1" and time.monotonic() - started_at >= STARTUP_GRACE_SECONDS:
                     _logger.warning("CAN carrier unavailable; restarting helper")
                     return
             now = time.monotonic()
-            if now < next_flick:
+            if restore_deadline is not None and now >= restore_deadline:
+                _logger.warning("No native neutral scroll frame followed volume down; leaving volume lower")
+                restore_deadline = None
+                next_flick = now + next_flick_delay()
+            native_neutral = extract_native_neutral(packet)
+            if native_neutral is None:
                 continue
-            if last_received is not None and now - last_received <= TRAFFIC_MAX_AGE_SECONDS:
-                flick_volume(can_socket)
-            next_flick = now + next_flick_delay()
+            if restore_deadline is not None:
+                can_socket.send(build_scroll_frame(native_neutral, SCROLL_UP))
+                restore_deadline = None
+                next_flick = now + next_flick_delay()
+                continue
+            if now >= next_flick:
+                can_socket.send(build_scroll_frame(native_neutral, SCROLL_DOWN))
+                restore_deadline = now + NEUTRAL_FRAME_TIMEOUT_SECONDS
 
 
 if __name__ == "__main__":
